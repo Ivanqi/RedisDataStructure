@@ -48,6 +48,7 @@ typedef struct dictIterator {
     long index;
     int table, safe;
     dictEntry *entry, *nextEntry;
+    // 用于误用检测的不安全迭代器的指纹
     long long fingerprint;
 } dictIterator;
 

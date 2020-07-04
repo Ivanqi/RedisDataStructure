@@ -6,13 +6,6 @@
 #include <sys/types.h>
 #include <stdarg.h>
 
-int __failed_tests = 0;
-int __test_num = 0;
-#define test_cond(descr,_c) do { \
-    __test_num++; printf("%d - %s: ", __test_num, descr); \
-    if(_c) printf("成功\n"); else {printf("失败\n"); __failed_tests++;} \
-} while(0);
-
 // sds类型
 typedef char *sds;
 
@@ -95,7 +88,7 @@ sds sdscatprintf(sds s, const char *fmt, ...);
 // 接受一个SDS和一个C字符串作为参数，从SDS中移除所有在C字符串中出现的字符
 sds sdstrim(sds s, const char *cset);
 
-// 保留SDS给定区间内的数据，不再区间内的数据会被覆盖或清除
+// 保留SDS给定区间内的数据，不在区间内的数据会被覆盖或清除
 sds sdsrange(sds s, int start, int end);
 
 // 更新给定 sds 所对应的 sdshdr 结构的 free 和 len 属性

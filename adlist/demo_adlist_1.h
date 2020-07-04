@@ -10,7 +10,7 @@ typedef struct listNode {
     struct listNode *next;
 
     // 值
-    void *value
+    void *value;
 } listNode;
 
 // 链表迭代器
@@ -104,7 +104,7 @@ listNode *listNext(listIter *iter);
 void listReleaseIterator(listIter *iter);
 
 // 复制一个给定链表的副本, O(N), N为链表长度
-list *listDup(int *orig);
+list *listDup(list *orig);
 
 // 查找并返回链表中包含给定值的节点, O(N), N为链表长度
 listNode *listSearchKey(list *list, void *key);
