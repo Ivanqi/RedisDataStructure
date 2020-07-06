@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 // long 类型转字符串的长度
 int ll2string(char *s, size_t len, long long value) {

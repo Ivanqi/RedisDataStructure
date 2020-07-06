@@ -4,20 +4,20 @@
 #define ZSKIPLIST_MAXLEVEL 32
 #define REDIS_ENCODING_SKIPLIST 7
 #define ZSKIPLIST_P 0.25
-#define REDIS_ENCODING_RAW 0
-
-#define redisAssertWithInfo(_c,_o,_e) ((_e)?(void)0 : (_redisAssertWithInfo(_c,_o,#_e,__FILE__,__LINE__),_exit(1)))
-#define redisAssert(_e) ((_e)?(void)0 : (_redisAssert(#_e,__FILE__,__LINE__),_exit(1)))
-#define redisPanic(_e) _redisPanic(#_e,__FILE__,__LINE__),_exit(1)
+#define REDIS_ENCODING_RAW 0    // 简单动态字符串
+#define REDIS_ENCODING_INT 1    // long 类型的整数
 
 /*
  * 对象类型
  */
-#define REDIS_STRING 0
-#define REDIS_LIST 1
-#define REDIS_SET 2
-#define REDIS_ZSET 3
-#define REDIS_HASH 4
+#define REDIS_STRING 0  // 字符串对象
+#define REDIS_LIST 1    // 列表对象
+#define REDIS_SET 2     // 集合对象
+#define REDIS_ZSET 3    // 有序集合对象
+#define REDIS_HASH 4    // 哈希对象
+
+#define REDIS_ERR -1
+#define REDIS_OK 0
 
 
 // Redis对象
@@ -38,7 +38,7 @@ typedef struct redisObject {
     int refcount;
 
     // 指向对象的值
-    void *ptr
+    void *ptr;
 } robj;
 
 // 跳跃表节点
@@ -47,7 +47,7 @@ typedef struct zskiplistNode {
     robj *obj;
     
     // 分值
-    double source;
+    double score;
 
     // 后退指针
     struct zskiplistNode *backward;
@@ -81,6 +81,16 @@ typedef struct {
     int minex, maxex;   // are min or max exclusive
 } zrangespec;
 
+/*
+ * 有序集
+ */
+// typedef struct zset {
+//     // 字典
+//     dict *dict;
+//     // 跳跃表
+//     zskiplist *zsl;
+// } zset;
+
 // 创建一个新的跳跃表, O(1)
 zskiplist *zslCreate(void);
 
@@ -90,18 +100,11 @@ void zslFree(zskiplist *zsl);
 // 将包含给定成员和分值的新节点添加到跳跃表中。平均O(logN)，最坏O(N)， N为跳跃表长度
 zskiplistNode *zslInsert(zskiplist *zsl, double score, robj *obj);
 
-unsigned char **zzlInsert(unsigned char *zl, robj *ele, double score);
 
 // 删除跳跃表中包含给定成员和分值的节点。平均O(logN),最坏O(N)， N为跳跃表长度
 int zslDelete(zskiplist *zsl, double score, robj *obj);
 
-zskiplistNode *zslFirstInRange(zskiplist *zsl, zran);
-
-double zzlGetScore(unsigned char *sptr);
-
-void zzlNext(unsigned char *zsl, unsigned char **eptr, unsigned char **sptr);
-
-void zzlPrev(unsigned char *zl, unsigned char **eptr, unsigned char **sptr);
+zskiplistNode *zslFirstInRange(zskiplist *zsl, zrangespec range);
 
 unsigned int zsetLength(robj *zobj);
 

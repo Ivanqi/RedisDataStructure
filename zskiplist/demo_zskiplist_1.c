@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <assert.h>
 #include "demo_zskiplist_1.h"
 
 /**
@@ -13,7 +14,7 @@ zskiplistNode *zslCreateNode(int level, double score, robj *obj) {
     zskiplistNode *zn = malloc(sizeof(*zn) + level + sizeof(struct zskiplistLevel));
 
     // 点数
-    zn->score = obj;
+    zn->score = score;
 
     // 对象
     zn->obj = obj;
@@ -58,9 +59,9 @@ void zslFreeNode(zskiplistNode *node) {
 // 释放整个跳跃表
 void zslFree(zskiplist *zsl) {
 
-    zskiplistNode *node = zsl->header->level[0].forward, *next
+    zskiplistNode *node = zsl->header->level[0].forward, *next;
 
-    free(zsl->header);
+    // free(zsl->header);
 
     // 遍历删除, O(N)
     while (node) {
@@ -215,3 +216,285 @@ void zslDeleteNode(zskiplist *zsl, zskiplistNode *x, zskiplistNode **update) {
     }
     zsl->length--;
 }
+
+/**
+ *  从skiplist 中删除和给定obj以及score匹配元素
+ */
+int zslDelete(zskiplist *zsl, double score, robj *obj) {
+
+    zskiplistNode *update[ZSKIPLIST_MAXLEVEL], *x;
+    int i;
+
+    x = zsl->header;
+
+    // 遍历所有层，记录删除节点需要被修改的节点到 update 数组
+    for (i = zsl->level - 1; i >= 0; i--) {
+        while (x->level[i].forward &&
+            (x->level[i].forward->score < score ||
+                (x->level[i].forward->score == score && 
+                compareStringObjects(x->level[i].forward->obj, obj) < 0))) {
+            
+            x = x->level[i].forward;
+        }
+        update[i] = x;
+    }
+
+    /**
+     * 因为多个不同的member可能有相同的score
+     * 所以要确保x的member和score都匹配时，才进行删除
+     */
+    x = x->level[0].forward;
+    if (x && score == x->score && equalStringObjects(x->obj, obj)) {
+        zslDeleteNode(zsl, x, update);
+        zslFreeNode(x);
+        return 1;
+    } else {
+        return 0;   // not found
+    }
+
+    return 0; // not found
+}
+
+// 检查 value是否属于 spec 指定的范围内
+static int zslValueGteMin(double value, zrangespec *spec) {
+
+    return spec->minex ? (value > spec->min) : (value >= spec->min);
+}
+
+// 检查value是否属于 spce指定的范围内
+static int zslValueLteMax(double value, zrangespec *spec) {
+
+    return spec->maxex ? (value < spec->max) : (value <= spec->max);
+}
+
+/**
+ * 检查zset中的元素是否在给定范围之内
+ */
+int zslIsRange(zskiplist *zsl, zrangespec *range) {
+
+    zskiplistNode *x;
+
+    if (range->min > range->max || (range->min == range->max && (range->minex || range->maxex))) {
+        return 0;
+    }
+
+    /**
+     * 如果zset 的最大节点的 score比范围的最小值要小
+     * 那么zset 不在范围内
+     */
+    x = zsl->tail;
+    if (x == NULL || !zslValueGteMin(x->score, range)) {
+        return 0;
+    }
+
+    /**
+     * 如果zset的最小节点的score比范围的最大值要大
+     * 那么zset不在范围内
+     */
+    x = zsl->header->level[0].forward;
+    if (x == NULL || !zslValueLteMax(x->score, range)) {
+        return 0;
+    }
+
+    return 1;   // 在范围内
+}
+
+// 找到跳跃表中第一个符合给定范围的元素
+zskiplistNode *zslFirstInRange(zskiplist *zsl, zrangespec range) {
+
+    zskiplistNode *x;
+    int i;
+
+    // 如果超过范围，返回NULL
+    if (!zslIsRange(zsl, &range)) return NULL;
+
+    // 找到第一个score值大于给定范围最小值的节点 O(N)
+    x = zsl->header;
+    for (i = zsl->level - 1; i >= 0; i--) {
+        while (x->level[i].forward && 
+            !zslValueGteMin(x->level[i].forward->score, &range)) {
+                x = x->level[i].forward;
+        }
+    }
+
+    x = x->level[0].forward;
+    assert(x != NULL);
+
+    // 检查score值是否小于 max范围
+    if (!zslValueLteMax(x->score, &range)) return NULL;
+    return x;
+}
+
+// 删除给定范围内的score的元素
+// unsigned long zslDeleteRangeByScore(zskiplist *zsl, zrangespec range, dcit *dict) {
+
+//     zskiplistNode *update[ZSKIPLIST_MAXLEVEL], *x;
+//     unsigned long removed = 0;
+//     int i;
+
+//     // 记录沿途的节点
+//     x = zsl->header;
+//     for (i = zsl->level - 1; i >= 0; i--) {
+//         while (x->level[i].forward && (range.minex ? x->level[i].forward->score <= range.min : x->level[i].forward->score < range.min)) {
+//             x = x->level[i].forward;
+//         }
+//     }
+
+//     // Current node is the last with score < or <= min.
+//     x = x->level[0].forward;
+
+//     // 一直向右删除，直接到达 range 的底为止。 O(N ^ 2)
+//     while (x && (range.maxex ? x->score < range.max : x->score <= range.max)) {
+//         // 保存后继指针
+//         zskiplistNode *next = x->level[0].forward;
+//         // 在跳跃表中删除 O(N)
+//         zslDeleteNode(zsl, x, update);
+//         // 在字典中删除, O(1)
+//         dictDelete(dict, x->obj);
+//         // 释放
+//         zslFreeNode(x);
+
+//         remove++;
+
+//         x = next;
+//     }
+
+//     return removed;
+// }
+
+// 删除给定排序范围内的所有节点
+// unsigned long zslDeleteRangeByRank(zskiplist *zsl, unsigned int start, unsigned int end, dict *dict) {
+
+//     zskiplistNode *update[ZSKIPLIST_MAXLEVEL], *x;
+//     unsigned long traversed = 0, removed = 0;
+//     int i;
+
+//     // 统计计算rank， 移动删除开始的地方
+//     x = zsl->header;
+//     for (i = zsl->level - 1; i >= 0; i--) {
+//         while (x->level[i].forward && (traversed + x->level[i].span) < start) {
+//             traversed += x->level[i].span;
+//             x = x->level[i].forward;
+//         }
+//         update[i] = x;
+//     }
+
+//     // 算上start节点
+//     traversed++;
+
+//     /**
+//      * 从start开始，删除直到到达索引end，或者末尾
+//      * O(N ^ 2)
+//      */
+//     x = x->level[0].forward;
+//     while (x && traversed <= end) {
+//         // 保存后一节点的指针
+//         zskiplistNode *next = x->level[0].forward;
+//         // 删除skiplist 节点, O(N)
+//         zslDeleteNode(zsl, x, udpate);
+//         // 删除dict 节点，O(1)
+//         dictDelete(dict, x->obj);
+//         // 删除节点
+//         zslFreeNode(x);
+//         // 删除计数
+//         removed++;
+//         traversed++;
+//         x = next;
+//     }
+
+//     return removed;
+// }
+
+/**
+ * 返回目标元素在有序集合中的rank
+ * 如果元素不存在与有序集合，那么返回 0
+ */
+unsigned long zslGetRank(zskiplist *zsl, double score, robj *o) {
+
+    zskiplistNode *x;
+    unsigned long rank = 0;
+    int i;
+
+    x = zsl->header;
+    /**
+     * 遍历zskiplist,并累积沿途的span到rank，找到目标元素时返回 rank
+     * O(N)
+     */
+    for (i = zsl->level - 1; i >= 0; i--) {
+        while (x->level[i].forward && (x->level[i].forward->score || 
+            (x->level[i].forward->score && compareStringObjects(x->level[i].forward->obj, o) <= 0))) {
+            // 累积
+            rank += x->level[i].span;    
+            // 前进
+            x = x->level[i].forward;
+        }
+
+        // 找到目标元素
+        if (x->obj && equalStringObjects(x->obj, o)) {
+            return rank;
+        }
+    }
+
+    return 0;
+}
+
+/**
+ * 根据给定的 rank 查找元素
+ */
+zskiplistNode *zslGetElementByRank(zskiplist *zsl, unsigned long rank) {
+
+    zskiplistNode *x;
+    unsigned long traversed = 0;
+    int i;
+
+    // 沿着指针前进，直到累积的步数 traversed 等于 rank为止 O(N)
+    x = zsl->header;
+    for (i = zsl->level - 1; i >= 0; i--) {
+        while (x->level[i].forward && (traversed + x->level[i].span) <= rank) {
+            traversed += x->level[i].span;
+            x = x->level[i].forward;
+        }
+
+        if (traversed == rank) {
+            return x;
+        }
+    }
+
+    // 没有找到
+    return NULL;
+}
+
+// 根据min 和 max对象，将range值保存到spec上
+static int zslParseRange(robj *min, robj *max, zrangespec *spec) {
+
+    char *eptr;
+    spec->minex = spec->maxex = 0;
+
+    if (min->encoding == REDIS_ENCODING_INT) {
+        spec->min = (long)min->ptr;
+    } else {
+        if (((char *)min->ptr)[0] == '(') {
+            spec->min = strtod((char *)min->ptr + 1, &eptr);
+            if (eptr[0] != '\0' || isnan(spec->min)) return REDIS_ERR;
+        } else {
+            spec->min = strtod((char *)min->ptr, &eptr);
+            if (eptr[0] != '\0' || isnan(spec->min)) return REDIS_ERR;
+        }
+    }
+
+    if (max->encoding == REDIS_ENCODING_INT) {
+        spec->max = (long) max->ptr;
+    } else {
+        if (((char *)max->ptr)[0] == '(') {
+            spec->max = strtod((char *)max->ptr + 1, &eptr);
+            if (eptr[0] != '\0' || isnan(spec->max)) return REDIS_ERR;
+            spec->maxex = 1;
+        } else {
+            spec->max = strtod((char *)max->ptr, &eptr);
+            if (eptr[0] != '\0' || isnan(spec->max)) return REDIS_ERR;
+        }
+    }
+
+    return REDIS_OK;
+}
+
