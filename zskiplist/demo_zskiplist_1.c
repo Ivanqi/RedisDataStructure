@@ -59,17 +59,20 @@ void zslFreeNode(zskiplistNode *node) {
 // 释放整个跳跃表
 void zslFree(zskiplist *zsl) {
 
-    zskiplistNode *node = zsl->header->level[0].forward, *next;
-
-    // free(zsl->header);
+    if (zsl == NULL || zsl->header == NULL) {
+        return ;
+    }
 
     // 遍历删除, O(N)
-    while (node) {
+    zskiplistNode *node = zsl->header->level[0].forward, *next;
+
+    while (node != NULL) {
         next = node->level[0].forward;
         zslFreeNode(node);
         node = next;
     }
 
+    free(zsl->header);
     free(zsl);
 }
 
@@ -102,7 +105,7 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, robj *obj) {
 
     int i, level;
 
-    assert(isnan(score));
+    assert(!isnan(score));
 
     x = zsl->header;
 
@@ -138,6 +141,7 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, robj *obj) {
 
     // 计算新的随机层数
     level = zslRandomLevel();
+    // printf("level:%d\n", level);
 
     /**
      * 如果level比当前 skiplist 的最大层数还要大
@@ -155,6 +159,7 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, robj *obj) {
 
     // 创建新节点
     x = zslCreateNode(level, score, obj);
+    assert(x != NULL);
     // 根据update和rank 两个数组的资料，初始化新节点
     // 并设置相应的指针 O(N)
     for (i = 0; i < level; i++) {

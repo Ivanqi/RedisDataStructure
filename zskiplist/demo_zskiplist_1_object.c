@@ -30,15 +30,17 @@ void decrRefCount(void *obj) {
     robj *o = obj;
 
     if (o->refcount <= 0) {
-        printf("dercRefCount aginst refcount <= 0");
+        printf("dercRefCount aginst refcount <= 0\n");
+        exit(1);
     }
 
     if (o->refcount == 1) {
         // 如果引用数降为0
         // 根据对象类型，调用相应的对象释放函数来释放对象的值
         switch (o->type) {
+            case REDIS_STRING: printf("释放 STRING 类型\n"); break;
             // case REDIS_ZSET: freeZsetObject(o); break;
-            default: printf("Unknown object type"); break;
+            default: printf("Unknown object type\n"); break;
         }
 
         // 释放对象本身
