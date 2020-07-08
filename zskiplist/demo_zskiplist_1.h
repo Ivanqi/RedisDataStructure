@@ -81,16 +81,6 @@ typedef struct {
     int minex, maxex;   // are min or max exclusive
 } zrangespec;
 
-/*
- * 有序集
- */
-// typedef struct zset {
-//     // 字典
-//     dict *dict;
-//     // 跳跃表
-//     zskiplist *zsl;
-// } zset;
-
 // 创建一个新的跳跃表, O(1)
 zskiplist *zslCreate(void);
 
@@ -104,10 +94,12 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, robj *obj);
 // 删除跳跃表中包含给定成员和分值的节点。平均O(logN),最坏O(N)， N为跳跃表长度
 int zslDelete(zskiplist *zsl, double score, robj *obj);
 
+static int zslValueGteMin(double value, zrangespec *spec);
+static int zslValueLteMax(double value, zrangespec *spec);
+int zslIsInRange(zskiplist *zsl, zrangespec *range);
 zskiplistNode *zslFirstInRange(zskiplist *zsl, zrangespec range);
+zskiplistNode *zslLastInRange(zskiplist *zsl, zrangespec range);
 
-unsigned int zsetLength(robj *zobj);
-
-void zsetCovert(robj *zobj, int encoding);
+zskiplistNode *zslGetElementByRank(zskiplist *zsl, unsigned long rank) ;
 
 #endif

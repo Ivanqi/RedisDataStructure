@@ -3,23 +3,6 @@
 #include <assert.h>
 #include "demo_zskiplist_1.h"
 
-// 释放zset对象
-// void freeZsetObject(robj *o) {
-
-//     zset *zs;
-//     switch (o->encoding) {
-//         // skiplist 表示
-//         case REDIS_ENCODING_SKIPLIST:
-//             zs = o->ptr;
-//             // dictRelease(zs->dict)
-//             zslFree(zs->zsl);
-//             free(zs);
-//             break;
-//         default:
-//             printf("Unknown sotred set encoding");
-//     }
-// }
-
 /**
  * 减少对象的引用计数
  * 
@@ -38,8 +21,9 @@ void decrRefCount(void *obj) {
         // 如果引用数降为0
         // 根据对象类型，调用相应的对象释放函数来释放对象的值
         switch (o->type) {
-            case REDIS_STRING: printf("释放 STRING 类型\n"); break;
-            // case REDIS_ZSET: freeZsetObject(o); break;
+            case REDIS_STRING: 
+                // printf("释放 STRING 类型\n"); 
+                break;
             default: printf("Unknown object type\n"); break;
         }
 
@@ -76,7 +60,6 @@ int compareStringObjects(robj *a, robj *b) {
         bstr = b->ptr;
     }
 
-    // return bothsds ? sdscmp(astr, bstr) : strcmp(astr, bstr);
     return strcmp(astr, bstr);
 }
 
