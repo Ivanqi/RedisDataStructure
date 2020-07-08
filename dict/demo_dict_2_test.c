@@ -176,7 +176,6 @@ void dict_test_case_1() {
     for (j = 0; j < count; j++) {
         int retval = dictAdd(dict, array[j], array[j]);
         assert(retval == DICT_OK);
-        // free(name);
     }
 
     // dictIterator *dIter = dictGetIterator(dict);
@@ -219,27 +218,24 @@ void dict_test_case_2() {
     int j;
     long long start, elapsed;
     dict *dict = dictCreate(&BenchmarkDictType, NULL);
-    // int count = 20000000;
-    int count = 3;
+    int count = 2000000;
 
     start_benchmark();
 
-    char *name;
     for (j = 0; j < count; j++) {
-        name = (char *)malloc(sizeof(int));
-        sprintf(name, "key%d", j);
-        int retval = dictAdd(dict, name, name);
-        assert(retval == DICT_OK);
-        // free(name);
-    }
-    free(name);
 
-    dictIterator *dIter = dictGetIterator(dict);
-    dictEntry *node;
-    while ((node = dictNext(dIter)) != NULL) {
-        printf("node key:%s, val:%s\n", (char *)node->key, (char *)node->v.val);
-        printf("node reset");
+        char *buff = (char *)malloc(15);
+        snprintf(buff, 15, "key%d", j);
+        int retval = dictAdd(dict, buff, buff);
+        assert(retval == DICT_OK);
+
     }
+
+    // dictIterator *dIter = dictGetIterator(dict);
+    // dictEntry *node;
+    // while ((node = dictNext(dIter)) != NULL) {
+    //     printf("node key:%s, val:%s\n", (char *)node->key, (char *)node->v.val);
+    // }
 
     end_benchmark("Inserting");
 
@@ -250,12 +246,26 @@ void dict_test_case_2() {
 
     start_benchmark();
     for (j = 0; j < count; j++) {
-        name = (char *)malloc(sizeof(int));
-        sprintf(name, "key%d", j);
+        char *buff = (char *)malloc(15);
+        snprintf(buff, 15, "key%d", j);
         
-        dictEntry *de = dictFind(dict, name);
+        dictEntry *de = dictFind(dict, buff);
         assert(de != NULL);
     }
+    end_benchmark("Accessing missing");
+
+    start_benchmark();
+    for (j = 0; j < count; j++) {
+        char *buff = (char *)malloc(15);
+        snprintf(buff, 15, "key%d", j);
+
+        int retval = dictDelete(dict, buff);
+        assert(retval == DICT_OK);
+
+        retval = dictAdd(dict, buff, buff);
+        assert(retval == DICT_OK);
+    }
+    end_benchmark("Removing and adding");
 }
 
 int main() {
