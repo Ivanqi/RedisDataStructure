@@ -81,25 +81,46 @@ typedef struct {
     int minex, maxex;   // are min or max exclusive
 } zrangespec;
 
+zskiplistNode *zslCreateNode(int level, double score, robj *obj);
+
 // 创建一个新的跳跃表, O(1)
 zskiplist *zslCreate(void);
+
+void zslFreeNode(zskiplistNode *node);
 
 // 释放给定跳跃表，以及表中包含的所有节点, O(N)， N为跳跃表长度
 void zslFree(zskiplist *zsl);
 
+int zslRandomLevel(void);
+
 // 将包含给定成员和分值的新节点添加到跳跃表中。平均O(logN)，最坏O(N)， N为跳跃表长度
 zskiplistNode *zslInsert(zskiplist *zsl, double score, robj *obj);
 
+void zslDump(zskiplist *zsl);
+
+void zslDeleteNode(zskiplist *zsl, zskiplistNode *x, zskiplistNode **update);
 
 // 删除跳跃表中包含给定成员和分值的节点。平均O(logN),最坏O(N)， N为跳跃表长度
 int zslDelete(zskiplist *zsl, double score, robj *obj);
 
 static int zslValueGteMin(double value, zrangespec *spec);
+
 static int zslValueLteMax(double value, zrangespec *spec);
+
 int zslIsInRange(zskiplist *zsl, zrangespec *range);
+
 zskiplistNode *zslFirstInRange(zskiplist *zsl, zrangespec range);
+
 zskiplistNode *zslLastInRange(zskiplist *zsl, zrangespec range);
 
-zskiplistNode *zslGetElementByRank(zskiplist *zsl, unsigned long rank) ;
+unsigned long zslDeleteRangeByScore(zskiplist *zsl, zrangespec range);
+
+unsigned long zslDeleteRangeByRank(zskiplist *zsl, unsigned int start, unsigned int end);
+
+unsigned long zslGetRank(zskiplist *zsl, double score, robj *o);
+
+zskiplistNode *zslGetElementByRank(zskiplist *zsl, unsigned long rank);
+
+
 
 #endif

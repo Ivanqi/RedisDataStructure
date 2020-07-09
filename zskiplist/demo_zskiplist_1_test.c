@@ -84,7 +84,7 @@ void test_case_2() {
 
     for (i = 0; i < 50; i++) {
 
-        char buff[15] = {0};
+        char *buff = (char *)malloc(15);
         snprintf(buff, 15, "k%d", i + 1);
 
         robj *o = createRobj(buff);
@@ -116,13 +116,19 @@ void test_case_2() {
 
     printf("\n ============== rank =========== \n");
 
-    robj *o = createRobj("k50");
+    robj *o = createRobj("k46");
     double score = 46;
     unsigned long rank = zslGetRank(zsk, score, o);
     printf("rank:%u\n", rank);
 
     zskiplistNode *rankNode = zslGetElementByRank(zsk, rank);
     printf("rankNode score:%0.2lf, val:%s\n", rankNode->score, rankNode->obj->ptr);
+
+    unsigned long dNum = zslDeleteRangeByRank(zsk, 20, 30);
+    printf("删除节点: %d\n", dNum);
+
+    printf("\n ============== dump =========== \n");
+    zslDump(zsk);
 
     zslFree(zsk);
 }
