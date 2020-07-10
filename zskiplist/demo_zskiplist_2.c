@@ -277,7 +277,7 @@ int zslDelete(zskiplist *zsl, double score, sds ele, zskiplistNode **node) {
      * 所以要确保x的member和score都匹配时，才进行删除
      */
     x = x->level[0].forward;
-    if (x && score == x->score && sdscmp(x->ele, ele)) {
+    if (x && score == x->score && sdscmp(x->ele, ele) == 0) {
         zslDeleteNode(zsl, x, update);
         if (!node) {
             zslFreeNode(x);
@@ -288,7 +288,6 @@ int zslDelete(zskiplist *zsl, double score, sds ele, zskiplistNode **node) {
     } else {
         return 0;   // not found
     }
-
     return 0; // not found
 }
 
@@ -311,12 +310,16 @@ zskiplistNode *zslUpdateScore(zskiplist *zsl, double curscore, sds ele, double n
     x = x->level[0].forward;
     assert(x && curscore == x->score && sdscmp(x->ele, ele) == 0);
 
+    /**
+     * 如果更新后的score位置不变，直接替换值
+     */
     if ((x->backward == NULL || x->backward->score < newscore) && 
         (x->level[0].forward == NULL || x->level[0].forward->score > newscore)){
             x->score = newscore;
             return x;
     }
 
+    // score位置变化了，应该移除并重新插入
     zslDeleteNode(zsl, x, update);
     zskiplistNode *newnode = zslInsert(zsl, newscore, x->ele);
 
@@ -521,7 +524,7 @@ unsigned long zslGetRank(zskiplist *zsl, double score, sds ele) {
         }
 
         // 找到目标元素
-        if (x->ele && sdscmp(x->ele, ele)) {
+        if (x->ele && sdscmp(x->ele, ele) == 0) {
             return rank;
         }
     }
@@ -559,8 +562,9 @@ int sdscmplex(sds a, sds b) {
 
     if (a == b) return 0;
     if (a == shared.minstring || b == shared.maxstring) return -1;
-    if (a == shared.maxstring || b == shared.minstring) return ;
-    return sdscmp(a, b);
+    if (a == shared.maxstring || b == shared.minstring) return 1;
+    int ret =  sdscmp(a, b);
+    return ret;
 }
 
 int zslLexValueGteMin(sds value, zlexrangespec *spec) {
@@ -622,7 +626,6 @@ int zslIsInLexRange(zskiplist *zsl, zlexrangespec *range) {
     if (cmp > 0 || (cmp == 0 && (range->minex || range->maxex))) {
         return 0;
     }
-
     x = zsl->tail;
     if (x == NULL || !zslLexValueGteMin(x->ele, range)) {
         return 0;
@@ -632,7 +635,6 @@ int zslIsInLexRange(zskiplist *zsl, zlexrangespec *range) {
     if (x == NULL || !zslLexValueLteMax(x->ele, range)) {
         return 0;
     }
-
     return 1;
 }
 
@@ -644,7 +646,7 @@ zskiplistNode *zslFirstInLexRange(zskiplist *zsl, zlexrangespec *range) {
     if (!zslIsInLexRange(zsl, range)) return NULL;
 
     x = zsl->header;
-    for (i = zsl->level - 1; i >= 0; i++) {
+    for (i = zsl->level - 1; i >= 0; i--) {
         while (x->level[i].forward &&
             !zslLexValueGteMin(x->level[i].forward->ele, range)) {
             x = x->level[i].forward;
@@ -665,7 +667,7 @@ zskiplistNode *zslLastInLexRange(zskiplist *zsl, zlexrangespec *range) {
     int i;
 
     x = zsl->header;
-    for (i = zsl->level - 1; i >= 0; i++) {
+    for (i = zsl->level - 1; i >= 0; i--) {
         while (x->level[i].forward &&
             zslLexValueLteMax(x->level[i].forward->ele, range)) {
                 x = x->level[i].forward;

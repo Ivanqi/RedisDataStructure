@@ -7,6 +7,7 @@ const char *SDS_NOINIT;
 #include <sys/types.h>
 #include <stdarg.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #define SDS_LLSTR_SIZE 21
 
