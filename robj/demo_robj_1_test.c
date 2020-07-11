@@ -11,6 +11,12 @@ void test_case_1() {
     robj *stringObj = createStringObject(string, strlen(string));
     assert(stringObj != NULL);
 
+    printf("stringObj->ptr:%s\n", stringObj->ptr);
+
+    robj *encodeObj = tryObjectEncoding(stringObj);
+    assert(encodeObj != NULL);
+    printf("stringObj->ptr:%s\n", encodeObj->ptr);
+
     robj *longObj_1 = createStringObjectFromLongLong(1000);
     assert(longObj_1 != NULL);
 
@@ -23,10 +29,10 @@ void test_case_1() {
     robj *dupStringObj = dupStringObject(stringObj);
     assert(dupStringObj != NULL);
 
-    long long *llval = (long long*)malloc(sizeof(long long));
-    int ret = isObjectRepresentableAsLongLong(longObj_2, llval);
+    long long llval;
+    int ret = isObjectRepresentableAsLongLong(longObj_2, &llval);
     if (ret == 0) {
-        printf("是long long 类型, llval:%lld\n", *llval);
+        printf("是long long 类型, llval:%lld\n", llval);
     } else {
         printf("不是long long 类型\n");
     }

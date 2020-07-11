@@ -183,7 +183,7 @@ robj *tryObjectEncoding(robj *o) {
     }
 
     // 不对共享对象进行编码
-    if (o->refcount > 1) return 0;
+    if (o->refcount > 1) return o;
 
     // 只尝试对 string 对象进行编码
     assert(o != NULL);
