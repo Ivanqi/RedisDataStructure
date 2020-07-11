@@ -339,3 +339,21 @@ void sdsIncrLen(sds s, int incr) {
     assert(sh->free >= 0);
     s[sh->len] = '\0';
 }
+
+sds sdsfromlonglong(long long value) {
+
+    char buf[32], *p;
+    unsigned long long v;
+
+    v = (value < 0) ? -value : value;
+    p = buf + 31;
+
+    do {
+        *p-- = '0' + (v % 10);
+        v /= 10;
+    } while (v);
+
+    if (value < 0) *p-- = '-';
+    p++;
+    return sdsnewlen(p, 32 - (p - buf));
+}

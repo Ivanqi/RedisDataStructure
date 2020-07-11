@@ -24,7 +24,7 @@ typedef struct redisObject {
     unsigned type:4;
 
     // 不使用(对齐位)
-    unsigned notused:2
+    unsigned notused:2;
 
     // 编码方式
     unsigned encoding:4;
@@ -39,6 +39,46 @@ typedef struct redisObject {
     void *ptr;
 } robj;
 
+/*
+ * 共享对象
+ */
+struct sharedObjectsStruct {
+    robj *integers[REDIS_SHARED_INTEGERS];
+};
+
+robj *createObject(int type, void *ptr);
+
+robj *createStringObject(char *ptr, size_t len);
+
+
 void incrRefCount(robj *o);
+
+void createSharedObjects(void);
+
+robj *createStringObjectFromLongLong(long long value);
+
+robj *createStringObjectFromLongDouble(long double value);
+
+robj *dupStringObject(robj *o);
+
+void freeStringObject(robj *o);
+
+robj *resetRefCount(robj *obj);
+
+int isObjectRepresentableAsLongLong(robj *o, long long *llval);
+
+robj *tryObjectEncoding(robj *o);
+
+robj *getDecodedObject(robj *o);
+
+int compareStringObjects(robj *a, robj *b);
+
+int equalStringObjects(robj *a, robj *b);
+
+size_t stringObjectLen(robj *o);
+
+int getDoubleFromObject(robj *o, double *target);
+
+int getLongDoubleFromObject(robj *o, long double *target);
 
 #endif
