@@ -18,16 +18,18 @@ int ll2string(char *s, size_t len, long long value) {
 
     if (len == 0) return 0;
 
-    value = (value < 0) ? -value : value;
+    v = (value < 0) ? -value : value;
     p = buf + 31;
     do {
         *p-- = '0' + (v % 10);
         v /= 10;
     } while (v);
 
-    if (value < 0) *p-- = '-';
-    p++;
+    if (value < 0) {
+        *p-- = '-';
+    }
 
+    p++;
     l = 32 - (p - buf);
     if (l + 1 > len) {
         l = len - 1;

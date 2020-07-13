@@ -203,7 +203,8 @@ robj *tryObjectEncoding(robj *o) {
          * 看看value是否属于可共享值的范围
          * 如果是的化就用共享对象代替这个对象 o
          */
-        
+        decrRefCount(o);
+        incrRefCount(shared.integers[value]);
 
         // 将共享对象返回
         return shared.integers[value];
