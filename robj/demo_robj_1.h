@@ -17,6 +17,7 @@
 #define REDIS_ERR -1
 #define REDIS_OK 0
 
+
 // redis 对象
 typedef struct redisObject {
 
