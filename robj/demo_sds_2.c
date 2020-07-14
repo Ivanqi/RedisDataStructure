@@ -636,3 +636,40 @@ void sdsIncrLen(sds s, ssize_t incr) {
     }
     s[len] = '\0';
 }
+
+sds sdsRemoveFreeSpace(sds s) {
+
+    void *sh, *newsh;
+    char type, oldtype = s[-1] & SDS_TYPE_MASK;
+    int hdrlen, oldhdrlen = sdsHdrSize(oldtype);
+    size_t len = sdslen(s);
+    size_t avail = sdsavail(s);
+    sh = (char *)s - oldhdrlen;
+
+    if (avail == 0) {
+        return s;
+    }
+
+    type = sdsReqType(len);
+    hdrlen = sdsHdrSize(type);
+
+    if (oldtype == type || type > SDS_TYPE_8) {
+        newsh = realloc(sh, oldhdrlen + len + 1);
+        if (newsh == NULL) return NULL;
+        s = (char *)newsh + oldhdrlen;
+    } else {
+        newsh = malloc(hdrlen + len + 1);
+        if (newsh == NULL) return NULL;
+
+        memcpy((char *)newsh + hdrlen, s, len + 1);
+        free(sh);
+
+        s = (char *)newsh + hdrlen;
+        s[-1] = type;
+        
+        sdssetlen(s, len);
+    }
+
+    sdssetalloc(s, len);
+    return s;
+}

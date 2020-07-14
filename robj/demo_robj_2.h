@@ -2,6 +2,7 @@
 #define __ROBJ_2_H
 
 #include <limits.h>
+#include "demo_sds_2.h"
 
 #define LRU_BITS 24
 #define LRU_CLOCK_RESOLUTION 1000
@@ -30,6 +31,11 @@
 
 #define OBJ_SHARED_INTEGERS 10000
 
+#define sdsEncodedObject(objptr) (objptr->encoding == OBJ_ENCODING_RAW || objptr->encoding == OBJ_ENCODING_EMBSTR)
+
+#define REDIS_COMPARE_BINARY (1 << 0)
+#define REDIS_COMPARE_COLL (1 << 1)
+
 /**
  * robj的作用
  *  1. 为多种数据类型提供一种统一的表示方式
@@ -46,7 +52,7 @@ typedef struct redisObject {
 
 struct redisServer {
     int hz;                  // serverCron（）调用频率
-    unsigned int lruclock    // LRU驱逐时钟
+    unsigned int lruclock;   // LRU驱逐时钟
 };
 
 /*
@@ -59,6 +65,8 @@ struct sharedObjectsStruct {
 
 void initServerConfig();
 
+static long long mstime(void);
+
 unsigned int getLRUClock(void);
 
 unsigned int LRU_CLOCK(void);
@@ -66,6 +74,54 @@ unsigned int LRU_CLOCK(void);
 robj *createObject(int type, void *ptr);
 
 robj *makeObjectShared(robj *o);
+
+robj *createRawStringObject(const char *ptr, size_t len);
+
+robj *createEmbeddedStringObject(const char *ptr, size_t len);
+
+robj *createStringObject(const char *ptr, size_t len);
+
+robj *createStringObjectFromLongLongWithOptions(long long value, int valueobj);
+
+robj *createStringObjectFromLongLong(long long value);
+
+robj *createStringObjectFromLongLongForValue(long long value);
+
+robj *createStringObjectFromLongDouble(long double value, int humanfriendly);
+
+robj *dupStringObject(const robj *o);
+
+void freeStringObject(robj *o);
+
+void decrRefCountVoid(void *o);
+
+robj *resetRefCount(robj *obj);
+
+int isSdsRepresentableAsLongLong(sds s, long long *llval);
+
+int isObejctReresentableAsLongLong(robj *o, long long *llval);
+
+void trimStringObjectIfNeeded(robj *o);
+
+robj *tryObjectEncoding(robj *o);
+
+robj *getDecodedObject(robj *o);
+
+int compareStringObjectsWithFlags(robj *a, robj *b, int flags);
+
+int compareStringObjects(robj *a, robj *b);
+
+int collateStringObjects(robj *a, robj *b);
+
+int equalStringObjects(robj *a, robj *b);
+
+size_t stringObjecLen(robj *o);
+
+int getDoubleFromObject(const robj *o, double *target);
+
+int getLongDoubleFromObject(robj *o, long double *target);
+
+int getLongLongFromObject(robj *o, long long *targe);
 
 
 

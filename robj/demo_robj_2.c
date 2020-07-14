@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include <ctype>
+#include <ctype.h>
 #include <string.h>
 #include <errno.h>
 #include <assert.h>
@@ -19,6 +19,17 @@ void initServerConfig() {
 
     server.hz = CONFIG_DEFAULT_HZ;
     server.lruclock = getLRUClock();
+}
+
+static long long mstime(void) {
+
+    struct timeval tv;
+    long long mst;
+
+    gettimeofday(&tv, NULL);
+    mst = ((long long)tv.tv_sec) * 1000;
+    mst += tv.tv_usec / 1000;
+    return mst;
 }
 
 void createSharedObjects(void) {
@@ -144,7 +155,7 @@ robj *createStringObjectFromLongLongWithOptions(long long value, int valueobj) {
 
     robj *o;
 
-    if (value >= 0; value < OBJ_SHARED_REFCOUNT && valueobj == 0) {
+    if (value >= 0 && value < OBJ_SHARED_REFCOUNT && valueobj == 0) {
         increRefCount(shared.integers[value]);
         o = shared.integers[value];
     } else {
@@ -163,7 +174,7 @@ robj *createStringObjectFromLongLongWithOptions(long long value, int valueobj) {
 // 通过 createStringObjectFromLongLong 创建共享对象
 robj *createStringObjectFromLongLong(long long value) {
 
-    return createStringFromLongLongWithOptions(value, 0);
+    return createStringObjectFromLongLongWithOptions(value, 0);
 }
 
 // 通过 createStringObjectFromLongLongForValue 避免共享
@@ -188,7 +199,7 @@ robj *dupStringObject(const robj *o) {
 
     switch (o->encoding) {
         case OBJ_ENCODING_RAW:
-            return createRawStringObject(o->ptr, sdslen(p->ptr));
+            return createRawStringObject(o->ptr, sdslen(o->ptr));
 
         case OBJ_ENCODING_EMBSTR:
             return createEmbeddedStringObject(o->ptr, sdslen(o->ptr));
@@ -201,13 +212,6 @@ robj *dupStringObject(const robj *o) {
         default:
             printf("Wrong encoding.");
             break;
-    }
-}
-
-void freeStringObject(robj *o) {
-
-    if (o->encoding == OBJ_ENCODING_RAW) {
-        sdsfree(o->ptr);
     }
 }
 
@@ -224,4 +228,262 @@ robj *resetRefCount(robj *obj) {
 int isSdsRepresentableAsLongLong(sds s, long long *llval) {
 
     return string2ll(s, sdslen(s), llval) ? C_OK : C_ERR;;
+}
+
+int isObejctReresentableAsLongLong(robj *o, long long *llval) {
+
+    assert(o != NULL);
+    assert(o->type == OBJ_STRING);
+
+    if (o->encoding == OBJ_ENCODING_INT) {
+        if (llval) {
+            *llval = (long)o->ptr;
+        }
+        return C_OK;
+    } else {
+        return isSdsRepresentableAsLongLong(o->ptr, llval);
+    }
+}
+
+// 优化string对象的SDS字符串，使其只需要很少的空间
+void trimStringObjectIfNeeded(robj *o) {
+
+    if (o->encoding == OBJ_ENCODING_RAW && sdsavail(o->ptr) > sdslen(o->ptr) / 10) {
+        o->ptr = sdsRemoveFreeSpace(o->ptr);
+    }
+}
+
+robj *tryObjectEncoding(robj *o) {
+
+    long value;
+    sds s = o->ptr;
+    size_t len;
+
+    assert(o != NULL);
+    assert(o->type == OBJ_STRING);
+
+    if (!sdsEncodedObject(o)) {
+        return o;
+    }
+
+    if (o->refcount > 1) return o;
+
+    len = sdslen(s);
+
+    if (len <= 20 && string2l(s, len, &value)) {
+        if (value >= 0 && value < OBJ_SHARED_INTEGERS) {
+            decrRefCount(o);
+            increRefCount(shared.integers[value]);
+            return shared.integers[value];
+        } else {
+            if (o->encoding == OBJ_ENCODING_RAW) {
+                sdsfree(o->ptr);
+                o->encoding = OBJ_ENCODING_INT;
+                o->ptr = (void *) value;
+                return o;
+            } else if (o->encoding == OBJ_ENCODING_EMBSTR){
+                decrRefCount(o);
+                return createStringObjectFromLongLongForValue(value);
+            }
+        }
+    }
+
+    if (len <= OBJ_ENCODING_EMBSTR_SIZE_LIMIT) {
+        robj *emb;
+
+        if (o->encoding == OBJ_ENCODING_EMBSTR) {
+            return o;
+        }
+
+        emb = createEmbeddedStringObject(s, sdslen(s));
+        decrRefCount(o);
+        return emb;
+    }
+
+    trimStringObjectIfNeeded(o);
+
+    return o;
+}
+
+robj *getDecodedObject(robj *o) {
+
+    robj *dec;
+
+    if (sdsEncodedObject(o)) {
+        increRefCount(o);
+        return o;
+    }
+
+    if (o->type == OBJ_STRING && o->encoding == OBJ_ENCODING_INT) {
+        char buf[32];
+
+        ll2string(buf, 32, (long)o->ptr);
+        dec = createStringObject(buf, strlen(buf));
+        return dec;
+    } else {
+        printf("Unknown encoding type");
+        exit(1);
+    }
+}
+
+int compareStringObjectsWithFlags(robj *a, robj *b, int flags) {
+
+    assert(a != NULL);
+    assert(a->type == OBJ_STRING);
+    assert(b->type == OBJ_STRING);
+
+    char bufa[128], bufb[128], *astr, *bstr;
+    size_t alen, blen, minlen;
+
+    if (a == b) return 0;
+
+    if (sdsEncodedObject(a)) {
+        astr = a->ptr;
+        alen = sdslen(astr);
+    } else {
+        alen = ll2string(bufa, sizeof(bufa), (long) a->ptr);
+        astr = bufa;
+    }
+
+    if (sdsEncodedObject(b)) {
+        bstr = b->ptr;
+        blen = sdslen(bstr);
+    } else {
+        blen = ll2string(bufb, sizeof(bufb), (long)b->ptr);
+        bstr = bufb;
+    }
+
+    if (flags & REDIS_COMPARE_COLL) {
+        return strcoll(astr, bstr);
+    } else {
+        int cmp;
+
+        minlen = (alen < blen) ? alen : blen;
+        cmp = memcmp(astr, bstr, minlen);
+        if (cmp == 0) {
+            return alen - blen;
+        }
+        return cmp;
+    }
+}
+
+int compareStringObjects(robj *a, robj *b) {
+
+    return compareStringObjectsWithFlags(a, b, REDIS_COMPARE_BINARY);
+}
+
+int collateStringObjects(robj *a, robj *b) {
+
+    return compareStringObjectsWithFlags(a, b, REDIS_COMPARE_COLL);
+}
+
+int equalStringObjects(robj *a, robj *b) {
+
+    if (a->encoding == OBJ_ENCODING_INT && b->encoding == OBJ_ENCODING_INT) {
+        return a->ptr == b->ptr;
+    } else {
+        return compareStringObjects(a, b) == 0;
+    }
+}
+
+size_t stringObjecLen(robj *o) {
+
+    assert(o != NULL);
+    assert(o->type == OBJ_STRING);
+
+    if (sdsEncodedObject(o)) {
+        return sdslen(o->ptr);
+    } else {
+        return sdigits10((long)o->ptr);
+    }
+}
+
+int getDoubleFromObject(const robj *o, double *target) {
+
+    double value;
+    char *eptr;
+
+    if (o == NULL) {
+        value = 0;
+    } else {
+        assert(o != NULL);
+        assert(o->type == OBJ_STRING);
+
+        if (sdsEncodedObject(o)) {
+            errno = 0;
+            value = strtod(o->ptr, &eptr);
+            if (sdslen(o->ptr) == 0 || isspace(((const char*)o->ptr)[0]) || 
+            (size_t)(eptr - (char *)o->ptr) != sdslen(o->ptr) ||
+            (errno == ERANGE && (value == HUGE_VAL || value == -HUGE_VAL || value == 0)) ||
+            isnan(value)) {
+                return C_ERR;
+            }
+        } else if (o->encoding == OBJ_ENCODING_INT) {
+            value = (long)o->ptr;
+        } else {
+            printf("Unknown string encoding");
+            exit(1);
+        }
+    }
+
+    *target = value;
+    return C_OK;
+}
+
+int getLongDoubleFromObject(robj *o, long double *target) {
+
+    long double value;
+    char *eptr;
+
+    if (o == NULL) {
+        value = 0;
+    } else {
+        assert(o != NULL);
+        assert(o->type == OBJ_STRING);
+        if (sdsEncodedObject(o)) {
+            errno = 0;
+            value = strtold(o->ptr, &eptr);
+            if (sdslen(o->ptr) == 0 ||
+                isspace(((const char*)o->ptr)[0]) ||
+                (size_t)(eptr-(char*)o->ptr) != sdslen(o->ptr) ||
+                (errno == ERANGE &&
+                    (value == HUGE_VAL || value == -HUGE_VAL || value == 0)) ||
+                isnan(value))
+                return C_ERR;
+        } else if (o->encoding == OBJ_ENCODING_INT) {
+            value = (long)o->ptr;
+        } else {
+            printf("Unknown string encoding");
+            exit(1);
+        }
+    }
+    *target = value;
+    return C_OK;
+}
+
+int getLongLongFromObject(robj *o, long long *target) {
+
+    long long value;
+
+    if (o == NULL) {
+        value = 0;
+    } else {
+        assert(o != NULL);
+        assert(o->type == OBJ_STRING);
+
+        if (sdsEncodedObject(o)) {
+            if (string2ll(o->ptr, sdslen(o->ptr), &value) == 0) {
+                return C_ERR;
+            }
+        } else if (o->encoding == OBJ_ENCODING_INT) {
+            value = (long)o->ptr;
+        } else {
+            printf("Unknown string encoding");
+        }
+    }
+
+    if (target) {
+        *target = value;
+    }
+    return C_OK;
 }
