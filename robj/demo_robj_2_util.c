@@ -67,15 +67,18 @@ int string2ll(const char *s, size_t slen, long long *value) {
     int negative = 0;
     unsigned long long v;
 
+    // 空字符串
     if (plen == slen) {
         return 0;
     }
 
+    // 值为0
     if (slen == 1 && p[0] == '0') {
         if (value != NULL) *value = 0;
         return 1;
     }
 
+    // 值为负数
     if (p[0] == '-') {
         negative = 1;
         p++;
@@ -86,6 +89,7 @@ int string2ll(const char *s, size_t slen, long long *value) {
         }
     }
 
+    // 第一个数字必须不为0，否则值为0
     if (p[0] >= '1' && p[0] <= '9') {
         v = p[0] - '0';
         p++;
@@ -94,6 +98,7 @@ int string2ll(const char *s, size_t slen, long long *value) {
         return 0;
     }
 
+    // 遍历整个字符串
     while (plen < slen && p[0] >= '0' && p[0] <= '9') {
         if (v > (ULLONG_MAX / 10)) {
             return 0;
@@ -110,8 +115,10 @@ int string2ll(const char *s, size_t slen, long long *value) {
         plen++;
     }
 
+    // 并非整个字符串都能转换成整数，返回0
     if (plen < slen) return 0;
 
+    // 处理返回值的负数情况
     if (negative) {
         if (v > ((unsigned long long)(-(LLONG_MIN + 1)) + 1)) {
             return 0;

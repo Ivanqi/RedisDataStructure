@@ -115,7 +115,7 @@ int collateStringObjects(robj *a, robj *b);
 
 int equalStringObjects(robj *a, robj *b);
 
-size_t stringObjecLen(robj *o);
+size_t stringObjectLen(robj *o);
 
 int getDoubleFromObject(const robj *o, double *target);
 

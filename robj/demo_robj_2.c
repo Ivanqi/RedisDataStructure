@@ -36,7 +36,8 @@ void createSharedObjects(void) {
 
     int j;
     for (j = 0; j < OBJ_SHARED_INTEGERS; j++) {
-        shared.integers[j] = makeObjectShared(createObject(OBJ_STRING, (void *)(long)j));
+        shared.integers[j] = makeObjectShared(createObject(OBJ_STRING, (void*)(long)j));
+        shared.integers[j]->encoding = OBJ_ENCODING_INT;
     }
 
     shared.minstring = sdsnew("minstring");
@@ -66,7 +67,7 @@ void freeStringObject(robj *o) {
     }
 }
 
-void increRefCount(robj *o) {
+void incrRefCount(robj *o) {
 
     if (o->refcount != OBJ_SHARED_REFCOUNT) {
         o->refcount++;
@@ -115,6 +116,16 @@ robj *createRawStringObject(const char *ptr, size_t len) {
     return createObject(OBJ_STRING, sdsnewlen(ptr, len));
 }
 
+/**
+ * createEmbeddedStringObject对sds重新分配内存
+ * 将robj和sds放在一个连续的内存块中分配，这样对于短字符串的存储有利于减少内存碎片
+ * 这个连续的内存块包含如下几部分
+ *  16个字节的robj结构
+ *  3个字节的sdshdr8头
+ *  最多14个字节的sds字符数组
+ *  1个NULL结束符
+ * 加起来一共不超过34字节（16+3+14+1）
+ */
 robj *createEmbeddedStringObject(const char *ptr, size_t len) {
 
     robj *o = malloc(sizeof(robj) + sizeof(struct sdshdr8) + len + 1);
@@ -155,8 +166,8 @@ robj *createStringObjectFromLongLongWithOptions(long long value, int valueobj) {
 
     robj *o;
 
-    if (value >= 0 && value < OBJ_SHARED_REFCOUNT && valueobj == 0) {
-        increRefCount(shared.integers[value]);
+    if (value >= 0 && value < OBJ_SHARED_INTEGERS && valueobj == 0) {
+        incrRefCount(shared.integers[value]);
         o = shared.integers[value];
     } else {
         if (value >= LONG_MIN && value <= LONG_MAX) {
@@ -253,6 +264,28 @@ void trimStringObjectIfNeeded(robj *o) {
     }
 }
 
+/**
+ * 第1步：检查type。确保只对string类型的对象进行操作
+ * 第2步：检查encoding。 使用sdsEncodedObject宏，确保只对OBJ_ENCODING_RAW和OBJ_ENCODING_EMBSTR编码的string操作
+ * 第3步：检查refcount
+ *  引用计数大于1的共享对象，在多处被引用
+ *  由于编码过程结束后robj对象指针可能会变化，这样对引用计数大于1的对象，就需要更新所有地方的引用，这不容易做到。因此，对于计数大于1的不做编码处理
+ *  试图将字符串转成64位long。64位long所能表达的数据范围是 -2 ^ 63 到 2 ^ 63 - 1，用十进制表达出来最长是20位数
+ * 第4步：在转成long成功时，又分成两种情况
+ *  1. 第一种情况：如果Redis的配置不要求运行LRU替换算法，且转成的long型数字的值又比较小
+ *      值小于小于OBJ_SHARED_INTEGERS，在目前的实现中这个值是10000
+ *      那么会使用共享数字对象来表示。之所以这里的判断跟LRU有关，是因为LRU算法要求每个robj有不同的lru字段值，所以用了LRU就不能共享robj
+ *      shared.integers是一个长度为10000的数组，里面预存了10000个小的数字对象
+ *      这些小数字对象都是encoding = OBJ_ENCODING_INT的string robj对象
+ *  2. 第二种情况：如果前一步不能使用共享小对象来表示，那么将原来的robj编码成encoding = OBJ_ENCODING_INT，这时ptr字段直接存成这个long型的值
+ *      注意ptr字段本来是一个void*指针（即存储的是内存地址），因此在64位机器上有64位宽度，正好能存储一个64位的long型值
+ *      这样，除了robj本身之外，它就不再需要额外的内存空间来存储字符串值
+ * 第5步：对于哪些不能转成64位long的字符串进行处理。最后再做两步处理
+ *  1. 如果字符串长度足够小（小于等于OBJ_ENCODING_EMBSTR_SIZE_LIMIT，定义14）
+ *      那么调用createEmbeddedStringObject 编码成encoding = OBJ_ENCODING_EMBSTR
+ *  2. 如果前面所有的编码尝试都没有成功（仍然是OBJ_ENCODING_RAW），且sds里空余字节过多
+ *      做最后一次努力，调用sds的sdsRemoveFreeSpace接口来释放空余字节。     
+ */
 robj *tryObjectEncoding(robj *o) {
 
     long value;
@@ -273,7 +306,7 @@ robj *tryObjectEncoding(robj *o) {
     if (len <= 20 && string2l(s, len, &value)) {
         if (value >= 0 && value < OBJ_SHARED_INTEGERS) {
             decrRefCount(o);
-            increRefCount(shared.integers[value]);
+            incrRefCount(shared.integers[value]);
             return shared.integers[value];
         } else {
             if (o->encoding == OBJ_ENCODING_RAW) {
@@ -281,7 +314,7 @@ robj *tryObjectEncoding(robj *o) {
                 o->encoding = OBJ_ENCODING_INT;
                 o->ptr = (void *) value;
                 return o;
-            } else if (o->encoding == OBJ_ENCODING_EMBSTR){
+            } else if (o->encoding == OBJ_ENCODING_EMBSTR) {
                 decrRefCount(o);
                 return createStringObjectFromLongLongForValue(value);
             }
@@ -305,12 +338,18 @@ robj *tryObjectEncoding(robj *o) {
     return o;
 }
 
+/**
+ * 编码为OBJ_ENCODING_RAW和OBJ_ENCODING_EMBSTR的字符串robj对象，不做变化，原封不动返回
+ *  站在使用者的角度，这两种编码没有什么区别，内部都是封装的sds
+ * 编码为数字的字符串robj对象，将long重新转为十进制字符串的形式，然后调用createStringObject转为sds的表示
+ *  这里由long转成的sds字符串长度肯定不超过20，而根据createStringObject的实现，它们肯定会被编码成OBJ_ENCODING_EMBSTR的对象
+ */
 robj *getDecodedObject(robj *o) {
 
     robj *dec;
 
     if (sdsEncodedObject(o)) {
-        increRefCount(o);
+        incrRefCount(o);
         return o;
     }
 
@@ -386,7 +425,7 @@ int equalStringObjects(robj *a, robj *b) {
     }
 }
 
-size_t stringObjecLen(robj *o) {
+size_t stringObjectLen(robj *o) {
 
     assert(o != NULL);
     assert(o->type == OBJ_STRING);
