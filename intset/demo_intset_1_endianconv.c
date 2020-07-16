@@ -1,9 +1,10 @@
 #include <stdint.h>
+#include "demo_intset_1_endianconv.h"
 
 // 将 *p 指向的16位无符号整数从 little endian 切换到 big endian
 void memrev16(void *p) {
 
-    unsigned char *x = p, t;
+    unsigned char *x = (unsigned char *)p, t;
 
     t = x[0];
     x[0] = x[1];
@@ -13,7 +14,7 @@ void memrev16(void *p) {
 // 将 *p指向的32位无符号整数从little endian 切换到 big endian
 void memrev32(void *p) {
 
-    unsigned char *x = p, t;
+    unsigned char *x = (unsigned char *) p, t;
 
     t = x[0];
     x[0] = x[3];
@@ -27,7 +28,7 @@ void memrev32(void *p) {
 // 将 *p 指向的64位无符号整数从little endia 切换到  big endia
 void memrev64(void *p) {
 
-    unsigned char *x = p, t;
+    unsigned char *x = (unsigned char *) p, t;
 
     t = x[0];
     x[0] = x[7];
@@ -39,7 +40,7 @@ void memrev64(void *p) {
 
     t = x[2];
     x[2] = x[5];
-    x[5] = y;
+    x[5] = t;
 
     t = x[3];
     x[3] = x[4];
