@@ -32,7 +32,7 @@ int64_t _intsetGetEncoded(intset *is, int pos, uint8_t enc) {
         memrev32ifbe(&v32);
         return v32;
     } else {
-        memcpy(&v16, ((int64_t*)is->contents) + pos, sizeof(v16));
+        memcpy(&v16, ((int16_t*)is->contents) + pos, sizeof(v16));
         memrev16ifbe(&v16);
         return v16;
     }
