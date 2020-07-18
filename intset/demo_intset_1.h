@@ -61,4 +61,6 @@ uint32_t intsetLen(intset *is);
 // 返回整数集合占用的内存字节数, O(1)
 size_t intsetBlobLen(intset *s);
 
+uint8_t intsetFind(intset *is, int64_t value);
+
 #endif

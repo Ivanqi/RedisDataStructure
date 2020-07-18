@@ -3,6 +3,7 @@
 #include <assert.h>
 #include "demo_intset_1.h"
 #include "demo_intset_1_endianconv.h"
+#include <sys/time.h>
 
 void test_case_endianconv() {
 
@@ -40,15 +41,37 @@ void checkConsistency(intset *is) {
 
         if (encoding == INTSET_ENC_INT16) {
             int16_t *i16 = (int16_t*)is->contents;
-            assert(i16[i] < i16[i+1]);
+            assert(i16[i] < i16[i + 1]);
         } else if (encoding == INTSET_ENC_INT32) {
             int32_t *i32 = (int32_t*)is->contents;
-            assert(i32[i] < i32[i+1]);
+            assert(i32[i] < i32[i + 1]);
         } else {
             int64_t *i64 = (int64_t*)is->contents;
-            assert(i64[i] < i64[i+1]);
+            assert(i64[i] < i64[i + 1]);
         }
     }
+}
+
+long long usec(void) {
+    struct timeval tv;
+    gettimeofday(&tv,NULL);
+    return (((long long)tv.tv_sec)*1000000) + tv.tv_usec;
+}
+
+intset *createSet(int bits, int size) {
+    uint64_t mask = (1 << bits) - 1;
+    uint64_t i, value;
+    intset *is = intsetNew();
+
+    for (i = 0; i < size; i++) {
+        if (bits > 32) {
+            value = (rand() * rand()) & mask;
+        } else {
+            value = rand() & mask;
+        }
+        is = intsetAdd(is, value, NULL);
+    }
+    return is;
 }
 
 
@@ -87,6 +110,7 @@ void test_case_intset() {
         is = intsetAdd(is, 6, &success); assert(success);
         is = intsetAdd(is, 4, &success); assert(success);
         is = intsetAdd(is, 4, &success); assert(!success);
+        
         ok();
     }
 
@@ -101,6 +125,116 @@ void test_case_intset() {
         }
 
         assert(intrev32ifbe(is->length) == inserts);
+        checkConsistency(is);
+        ok();
+    }
+
+    printf("Upgrade from int16 to int32: ");
+    {
+        is = intsetNew();
+        is = intsetAdd(is, 32, NULL);
+        assert(intrev32ifbe(is->encoding) == INTSET_ENC_INT16);
+
+        is = intsetAdd(is, 65535, NULL);
+        assert(intrev32ifbe(is->encoding) == INTSET_ENC_INT32);
+
+        assert(intsetFind(is, 32));
+        assert(intsetFind(is, 65535));
+        checkConsistency(is);
+
+        is = intsetNew();
+        is = intsetAdd(is, 32, NULL);
+        assert(intrev32ifbe(is->encoding) == INTSET_ENC_INT16);
+
+        is = intsetAdd(is, -65535, NULL);
+        assert(intrev32ifbe(is->encoding) == INTSET_ENC_INT32);
+
+        assert(intsetFind(is, 32));
+        assert(intsetFind(is, -65535));
+        checkConsistency(is);
+        ok();
+    }
+
+    printf("Upgrade from int16 to int64: ");
+    {
+        is = intsetNew();
+        is = intsetAdd(is, 32, NULL);
+        assert(intrev32ifbe(is->encoding) == INTSET_ENC_INT16);
+
+        is = intsetAdd(is, 4294967295, NULL);
+        assert(intrev32ifbe(is->encoding) == INTSET_ENC_INT64);
+
+        assert(intsetFind(is, 32));
+        assert(intsetFind(is, 4294967295));
+        checkConsistency(is);
+
+        is = intsetNew();
+        is = intsetAdd(is, 32, NULL);
+        assert(intrev32ifbe(is->encoding) == INTSET_ENC_INT16);
+
+        is = intsetAdd(is, -4294967295, NULL);
+        assert(intrev32ifbe(is->encoding) == INTSET_ENC_INT64);
+        assert(intsetFind(is, 32));
+        assert(intsetFind(is, -4294967295));
+        checkConsistency(is);
+        ok();
+    }
+
+    printf("Upgrade from int32 to int64: ");
+    {
+        is = intsetNew();
+        is = intsetAdd(is, 65535, NULL);
+        assert(intrev32ifbe(is->encoding) == INTSET_ENC_INT32);
+
+        is = intsetAdd(is, 4294967295, NULL);
+        assert(intrev32ifbe(is->encoding) == INTSET_ENC_INT64);
+
+        assert(intsetFind(is, 65535));
+        assert(intsetFind(is, 4294967295));
+        checkConsistency(is);
+
+        is = intsetNew();
+        is = intsetAdd(is, 65535, NULL);
+        assert(intrev32ifbe(is->encoding) == INTSET_ENC_INT32);
+
+        is = intsetAdd(is, -4294967295, NULL);
+        assert(intrev32ifbe(is->encoding) == INTSET_ENC_INT64);
+
+        assert(intsetFind(is, 65535));
+        assert(intsetFind(is, -4294967295));
+        checkConsistency(is);
+        ok();
+    }
+
+    printf("Stress lookups: ");
+    {
+        long num = 100000, size = 10000;
+        int i, bits = 20;
+        long long start;
+        is = createSet(bits, size);
+        checkConsistency(is);
+
+        start = usec();
+        for (i = 0; i < num; i++) {
+            intsetSearch(is, rand() % ((1 << bits) - 1), NULL);
+        }
+        printf("%ld, lookups, %ld element set, %lld used\n", num, size, usec() - start);
+    }
+
+    printf("Stress add + delete: ");
+    {
+        int i, v1, v2;
+        is = intsetNew();
+        for (i = 0; i < 0xffff; i++) {
+            v1 = rand() % 0xffff;
+            is = intsetAdd(is, v1, NULL);
+            assert(intsetFind(is, v1));
+
+            v2 = rand() % 0xfff;
+            is = intsetRemove(is, v2, NULL);
+            assert(!intsetFind(is, v2));
+        }
+
         checkConsistency(is);
         ok();
     }
