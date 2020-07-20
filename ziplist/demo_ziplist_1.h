@@ -74,7 +74,7 @@
  */
 #define ZIPLIST_INCR_LENGTH(zl, incr) {  \
     if (ZIPLIST_LENGTH(zl) < UINT16_MAX)    \
-        ZIPLIST_LENGTH(zl) == intrev16ifbe(intrev16ifbe(ZIPLIST_LENGTH(zl)) + incr);    \
+        ZIPLIST_LENGTH(zl) = intrev16ifbe(intrev16ifbe(ZIPLIST_LENGTH(zl)) + incr);    \
 }
 
 /**
@@ -155,12 +155,13 @@ typedef struct zlentry {
  * 从 ptr指针中取出编码类型，并将它保存到encoding
  * 复杂度O(1)
  */
-#define ZIP_ENTRY_ENCODING(ptr, encoding) do {  \
-    (encoding) = (ptr[0]);  \
+#define ZIP_ENTRY_ENCODING(ptr, encoding) do {                  \
+    (encoding) = (ptr[0]);                                      \
     if ((encoding) < ZIP_STR_MASK) (encoding) &= ZIP_STR_MASK;  \
-} while (0)
+} while(0)
 
 static unsigned int zipIntSize(unsigned char encoding);
+
 /**
  * 从 ptr 指针中取出节点的编码，保存节点长度所需的长度，以及节点长度
  * 复杂度: O(1)
@@ -169,15 +170,15 @@ static unsigned int zipIntSize(unsigned char encoding);
  *  int 编码节点所需的长度
  */
 #define ZIP_DECODE_LENGTH(ptr, encoding, lensize, len) do {     \
-    /* 取出节点的编码 */
+    /* 取出节点的编码 */                                          \
     ZIP_ENTRY_ENCODING((ptr), (encoding));                      \
-    if ((encoding) < ZIP_INT_MASK) {                            \
-        /* 节点保存的是字符串，取出编码 */                           
+    if ((encoding) < ZIP_STR_MASK) {                            \
+        /* 节点保存的是字符串，取出编码 */                           \
         if ((encoding) == ZIP_STR_06B) {                        \
             (lensize) = 1;                                      \
             (len) = (ptr)[0] & 0x3f;                            \
         } else if ((encoding) == ZIP_STR_14B) {                 \
-            (lensize) = 2;
+            (lensize) = 2;                                      \
             (len) = (((ptr)[0] & 0x3f) << 8) | (ptr)[1];        \
         } else if (encoding == ZIP_STR_32B) {                   \
             (lensize) = 5;                                      \
@@ -189,9 +190,9 @@ static unsigned int zipIntSize(unsigned char encoding);
             assert(NULL);                                       \
         }                                                       \
     } else {                                                    \
-        /* 节点保存的是整数，取出编码 */
+        /* 节点保存的是整数，取出编码 */                            \
         (lensize) = 1;                                          \
-        (len) = zipIntSize(encoding)                            \
+        (len) = zipIntSize(encoding);                           \
     }                                                           \
 } while (0);
 
@@ -206,7 +207,7 @@ static unsigned int zipIntSize(unsigned char encoding);
     if ((ptr)[0] < ZIP_BIGLEN) {                               \
         (prevlensize) = 1;                                     \
     } else {                                                   \
-        (prevlensize) = 2;                                     \
+        (prevlensize) = 5;                                     \
     }                                                          \
 } while (0);
 
@@ -219,16 +220,87 @@ static unsigned int zipIntSize(unsigned char encoding);
  *  unsigned int
  */
 #define ZIP_DECODE_PREVLEN(ptr, prevlensize, prevlen) do {  \
-    /* 取得保存前一个节点的长度所需的字节数 */
+    /* 取得保存前一个节点的长度所需的字节数 */                    \
     ZIP_DECODE_PREVLENSIZE(ptr, prevlensize);               \
-    /* 获取长度值 */
+    /* 获取长度值 */                                          \
     if ((prevlensize) == 1) {                               \
         (prevlen) = (ptr)[0];                               \
     } else if ((prevlensize) == 5) {                        \
-        assert(sizeof(prevlensize) == 4);                   \
+        assert(sizeof((prevlensize)) == 4);                 \
         memcpy(&(prevlen), ((char *)(ptr)) + 1, 4);         \
         memrev32ifbe(&prevlen);                             \
-    }
+    }                                                       \
 } while (0);
+
+
+static unsigned int zipEncodeLength(unsigned char *p, unsigned char encoding, unsigned int rawlen);
+
+static unsigned int zipPrevEncodingLength(unsigned char *p, unsigned int len);
+
+static void zipPrevEncodeLengthForceLarge(unsigned char *p, unsigned int len);
+
+static int zipPrevLenByteDiff(unsigned char *p, unsigned int len);
+
+static unsigned int zipRawEntryLength(unsigned char *p);
+
+static int zipTryEncoding(unsigned char *entry, unsigned int entrylen, long long *v, unsigned char *encoding);
+
+static void zipSaveInteger(unsigned char *p, int64_t value, unsigned char encoding);
+
+static int64_t zipLoadInteger(unsigned char *p, unsigned char encoding);
+
+static zlentry zipEntry(unsigned char *p);
+
+// 创建一个新的压缩列表，O(1)
+unsigned char *ziplistNew(void);
+
+static unsigned char *ziplistResize(unsigned char *zl, unsigned int len);
+
+static unsigned int zipPrevEncodeLength(unsigned char *p, unsigned int len);
+
+static unsigned char *__ziplistCascadeUpdate(unsigned char *zl, unsigned char *p);
+
+static unsigned char *__ziplistDelete(unsigned char *zl, unsigned char *p, unsigned int num);
+
+static unsigned char *__ziplistInsert(unsigned char *zl, unsigned char *p, unsigned char *s, unsigned int slen);
+
+// 创建一个包含给定值的新节点，并将这个新节点添加到压缩列表的表头或表尾,平均O(N)，最坏O(N ^ 2)
+unsigned char *ziplistPush(unsigned char *zl, unsigned char *s, unsigned int slen, int where);
+
+// 返回压缩列表给定索引上的节点, O(N)
+unsigned char *ziplistIndex(unsigned char *zl, int index);
+
+// 返回给定节点的下一个节点，O(1)
+unsigned char *ziplistNext(unsigned char *zl, unsigned char *p);
+
+// 返回给定节点的前一个节点,O(1)
+unsigned char *ziplistPrev(unsigned char *zl, unsigned char *p);
+
+// 获取给定节点所保存的值, O(1)
+unsigned int ziplistGet(unsigned char *p, unsigned char **sstr, unsigned int *slen, long long *sval);
+
+// 将包含给定值的新节点插入到给定节点之后，平均O(N)，最坏O(N ^ 2)
+unsigned char *ziplistInsert(unsigned char *zl, unsigned char *p, unsigned char *s, unsigned int slen);
+
+// 从压缩列表中删除给定的节点。平均O(N), 最坏O(N ^ 2)
+unsigned char *ziplistDelete(unsigned char *zl, unsigned char **p);
+
+// 删除压缩列表在给定索引上的连续多个节点. 平均O(N)， 最坏O(N ^ 2)
+unsigned char *ziplistDeleteRange(unsigned char *zl, unsigned int index, unsigned int num);
+
+unsigned int ziplistCompare(unsigned char *p, unsigned char *sstr, unsigned int slen);
+
+// 在压缩列表中查找并返回包含了给定值的节点
+// 因为节点的值可能是一个字节数组，所以检查节点值和给定值是否相同的复杂度为O(N),而查找整个列表的复杂度则为O(N ^ 2)
+unsigned char *ziplistFind(unsigned char *p, unsigned char *vstr, unsigned int vlen, unsigned int skip);
+
+// 返回压缩列表目前包含的节点数据
+// 节点数量小于 65535 时候为 O(1), 大于 65535为O(N)
+unsigned int ziplistLen(unsigned char *zl);
+
+// 返回压缩列表目前占用的内存字节数，O(1)
+size_t ziplistBlobLen(unsigned char *zl);
+
+void ziplistRepr(unsigned char *zl);
 
 #endif

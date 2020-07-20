@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 #include "demo_ziplist_1.h"
+#include "demo_ziplist_1_util.h"
 
 /**
  * 返回encoding 指定的整数编码方式所需的长度
@@ -113,7 +115,7 @@ static int zipPrevLenByteDiff(unsigned char *p, unsigned int len) {
 
     // 获取编码前一节点所需的长度
     unsigned int prevlensize;
-    ZIP_DECODE_PREVLEN(p, prevlensize);
+    ZIP_DECODE_PREVLENSIZE(p, prevlensize);
     // 计算差
     return zipPrevEncodingLength(NULL, len) - prevlensize;
 }
@@ -281,7 +283,7 @@ unsigned char *ziplistNew(void) {
      * 分别用于 <zlbytes><zltail><zllen> 和 <zlend>
      */
     unsigned int bytes = ZIPLIST_HEADER_SIZE + 1;
-    unsigned char *zl = malloc(bytes);
+    unsigned char *zl = (unsigned char *)malloc(bytes);
 
     // 设置长度
     ZIPLIST_BYTES(zl) = intrev32ifbe(bytes);
@@ -306,7 +308,7 @@ unsigned char *ziplistNew(void) {
 static unsigned char *ziplistResize(unsigned char *zl, unsigned int len) {
 
     // 重分配
-    zl = realloc(zl, len);
+    zl = (unsigned char *)realloc(zl, len);
     // 更新长度
     ZIPLIST_BYTES(zl) = intrev32ifbe(len);
     // 设置表尾
@@ -314,6 +316,31 @@ static unsigned char *ziplistResize(unsigned char *zl, unsigned int len) {
 
     return zl;
 }
+
+/**
+ * 编码前置节点的长度，并将它写入 p
+ * 
+ * 如果p为NULL，那么返回编码len所需的字节数
+ * 
+ * 复杂度:O(1)
+ */
+static unsigned int zipPrevEncodeLength(unsigned char *p, unsigned int len) {
+
+    if (p == NULL) {
+        return (len < ZIP_BIGLEN) ? 1 : sizeof(len) + 1;
+    } else {
+        if (len < ZIP_BIGLEN) {
+            p[0] = len;
+            return 1;
+        } else {
+            p[0] = ZIP_BIGLEN;
+            memcpy(p + 1, &len, sizeof(len));
+            memrev32ifbe(p + 1);
+            return 1 + sizeof(len);
+        }
+    }
+}
+
 
 /**
  * 当将一个新节点添加到某个节点之前的时候，
@@ -348,7 +375,7 @@ static unsigned char *__ziplistCascadeUpdate(unsigned char *zl, unsigned char *p
         rawlen = cur.headersize + cur.len;
 
         // 编码当前节点的长度所需的空间大小
-        rawlensize = zipPrevEncodLength(NULL, rawlen);
+        rawlensize = zipPrevEncodeLength(NULL, rawlen);
 
         // 已经到达表尾，退出
         if (p[rawlen] == ZIP_END) break;
@@ -366,7 +393,7 @@ static unsigned char *__ziplistCascadeUpdate(unsigned char *zl, unsigned char *p
         if (next.prevrawlensize < rawlensize) {
             offset = p - zl;
             // 需要多添加的长度
-            extra = rawlensize - next.prerawlensize;
+            extra = rawlensize - next.prevrawlensize;
             // 重分配，复杂度为 O(N)
             zl = ziplistResize(zl, curlen + extra);
             p = zl + offset;
@@ -409,7 +436,7 @@ static unsigned char *__ziplistCascadeUpdate(unsigned char *zl, unsigned char *p
  */
 static unsigned char *__ziplistDelete(unsigned char *zl, unsigned char *p, unsigned int num) {
 
-    unsigned int i, totlen, delete = 0;
+   unsigned int i, totlen, deleted = 0;
     size_t offset;
     int nextdiff = 0;
     zlentry first, tail;
@@ -492,7 +519,7 @@ static unsigned char *__ziplistInsert(unsigned char *zl, unsigned char *p, unsig
      */
     if (p[0] != ZIP_END) {
         entry = zipEntry(p);
-        prevlen = entry.prevawlen;
+        prevlen = entry.prevrawlen;
     } else {
         // 获取列表最后一个节点 （表尾）的地址
         unsigned char *ptail = ZIPLIST_ENTRY_TAIL(zl);
@@ -520,7 +547,7 @@ static unsigned char *__ziplistInsert(unsigned char *zl, unsigned char *p, unsig
     reqlen += zipPrevEncodingLength(NULL, prevlen);
 
     // 计算编码 slen 所需的长度
-    reqlen += zipEncodingLength(NULL, encoding, slen);
+    reqlen += zipEncodeLength(NULL, encoding, slen);
 
     /**
      * 如果添加的位置不是表尾，那么必须确定后继节点的 prevlen 空间
