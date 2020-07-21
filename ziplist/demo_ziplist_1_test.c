@@ -8,8 +8,11 @@ unsigned char *createIntList() {
     unsigned char *zl = ziplistNew();
     char buf[32];
     
+    sprintf(buf, "100");
     zl = ziplistPush(zl, (unsigned char *)buf, strlen(buf), ZIPLIST_TAIL);
 
+    sprintf(buf, "128000");
+    zl = ziplistPush(zl, (unsigned char *)buf, strlen(buf), ZIPLIST_TAIL);
 }
 
 void test_case_1() {
