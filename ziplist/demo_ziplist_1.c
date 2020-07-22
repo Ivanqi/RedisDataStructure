@@ -543,10 +543,21 @@ static unsigned char *__ziplistInsert(unsigned char *zl, unsigned char *p, unsig
         reqlen = slen;
     }
 
-    // 计算编码 prevlen 所需的长度
+    /**
+     * 计算编码 prevlen 所需的长度
+     * 如果前一个节点的长度小于254字节，那么prevlen为1字节
+     * 如果前一个节点的长度小于254字节，那么prevlen为5字节
+     *  其中属性的第一个字节设置为0xFE(254),而之后的四个字节则用于保存前一个节点的长度
+     * */
     reqlen += zipPrevEncodingLength(NULL, prevlen);
 
-    // 计算编码 slen 所需的长度
+    /**
+     * 计算编码 slen 所需的长度
+     * 1字节，2字节，5字节，值的最高位为00，01或者10都是字节数组编码
+     *  这种编码表示节点的content属性保存着字节数组，数组的长度由编码除去最高两位之后的其他位记录
+     * 1字节长，值的最高位是以11开头的是整数编码
+     *  这种编码表示节点的content属性保存着整数值，整数值的类型和长度由编码除去最高两位之后的其他位记录
+     * */
     reqlen += zipEncodeLength(NULL, encoding, slen);
 
     /**
