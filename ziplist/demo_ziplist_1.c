@@ -225,7 +225,7 @@ static int64_t zipLoadInteger(unsigned char *p, unsigned char encoding) {
         ret = ((int8_t *)p)[0];
     } else if (encoding == ZIP_INT_16B) {   // 16 bit
         memcpy(&i16, p, sizeof(i16));
-        memrev16ifbe(&16);
+        memrev16ifbe(&i16);
         ret = i16;
     } else if (encoding == ZIP_INT_32B) {   // 32 bit
         memcpy(&i32, p, sizeof(i32));
@@ -238,7 +238,8 @@ static int64_t zipLoadInteger(unsigned char *p, unsigned char encoding) {
         ret = i32 >> 8;
     } else if (encoding == ZIP_INT_64B) {   // 64bit
         memcpy(&i64, p, sizeof(i64));
-        memrev64ifbe(&64);
+        memrev64ifbe(&i64);
+        ret = i64;
     } else if (encoding >= ZIP_INT_IMM_MIN && encoding <= ZIP_INT_IMM_MASK) {
         ret = (encoding & ZIP_INT_IMM_MASK) - 1;
     } else {
@@ -448,8 +449,14 @@ static unsigned char *__ziplistDelete(unsigned char *zl, unsigned char *p, unsig
      * 并移动指针p
      * 复杂度 O(N)
      */
-    
+    for (i = 0; p[0] != ZIP_END && i < num; i++) {
+        p += zipRawEntryLength(p);
+        deleted++;
+    }
+
+    // 被删除的节点的 byte 总和
     totlen = p - first.p;
+
     if (totlen > 0) {
         /**
          * 更新最后一个被删除的节点之后的一个节点
@@ -458,7 +465,7 @@ static unsigned char *__ziplistDelete(unsigned char *zl, unsigned char *p, unsig
          */
         nextdiff = zipPrevLenByteDiff(p, first.prevrawlen);
         p -= nextdiff;
-        zipPrevEncodingLength(p, first.prevrawlen);
+        zipPrevEncodeLength(p, first.prevrawlen);
 
         // 更新ziplist到表尾的偏移量
         ZIPLIST_TAIL_OFFSET(zl) = intrev32ifbe(intrev32ifbe(ZIPLIST_TAIL_OFFSET(zl)) - totlen);
@@ -473,7 +480,7 @@ static unsigned char *__ziplistDelete(unsigned char *zl, unsigned char *p, unsig
          * 前移内存中的数据，覆盖原本的被删除数据
          * 复杂度 O(N)
          */
-        memmove(first.p, p, intrev32ifbe(ZIPLIST_BYTES(zl)) - (p -zl) - 1);
+        memmove(first.p, p, intrev32ifbe(ZIPLIST_BYTES(zl)) - (p - zl) - 1);
     } else {
         // 被删除的是尾节点，无须内存移动，直接更新偏移值就可以了
         ZIPLIST_TAIL_OFFSET(zl) = intrev32ifbe((first.p - zl) - first.prevrawlen);
@@ -484,7 +491,7 @@ static unsigned char *__ziplistDelete(unsigned char *zl, unsigned char *p, unsig
      * 复杂度 O(N)
      */
     offset = first.p - zl;
-    zl = ziplistResize(zl, intrev32ifbe(ZIPLIST_BYTES(zl)) - totlen+nextdiff);
+    zl = ziplistResize(zl, intrev32ifbe(ZIPLIST_BYTES(zl)) - totlen + nextdiff);
     ZIPLIST_INCR_LENGTH(zl, -deleted);
     p = zl + offset;
 
@@ -762,12 +769,14 @@ unsigned char *ziplistPrev(unsigned char *zl, unsigned char *p) {
 unsigned int ziplistGet(unsigned char *p, unsigned char **sstr, unsigned int *slen, long long *sval) {
 
     zlentry entry;
+
     // 表尾
     if (p == NULL || p[0] == ZIP_END) return 0;
     if (sstr) *sstr = NULL;
 
     // 获取节点
     entry = zipEntry(p);
+
     // 字符串
     if (ZIP_IS_STR(entry.encoding)) {
         if (sstr) {
@@ -777,7 +786,7 @@ unsigned int ziplistGet(unsigned char *p, unsigned char **sstr, unsigned int *sl
     // 数字值
     } else {
         if (sval) {
-            *sval = zipLoadInteger(p+entry.headersize,entry.encoding);
+            *sval = zipLoadInteger(p + entry.headersize, entry.encoding);
         }
     }
     return 1;
@@ -828,7 +837,7 @@ unsigned char *ziplistDelete(unsigned char *zl, unsigned char **p) {
  */
 unsigned char *ziplistDeleteRange(unsigned char *zl, unsigned int index, unsigned int num) {
 
-    unsigned char *p = ziplistIndex(zl,index);
+    unsigned char *p = ziplistIndex(zl, index);
     return (p == NULL) ? zl : __ziplistDelete(zl, p, num);
 }
 
@@ -991,16 +1000,19 @@ void ziplistRepr(unsigned char *zl) {
     int index = 0;
     zlentry entry;
 
-    printf(
+    printf (
         "{total bytes %d} "
         "{length %u}\n"
         "{tail offset %u}\n",
         intrev32ifbe(ZIPLIST_BYTES(zl)),
         intrev16ifbe(ZIPLIST_LENGTH(zl)),
         intrev32ifbe(ZIPLIST_TAIL_OFFSET(zl)));
+
     p = ZIPLIST_ENTRY_HEAD(zl);
+
     while(*p != ZIP_END) {
         entry = zipEntry(p);
+
         printf(
             "{"
                 "addr 0x%08lx, "
@@ -1020,17 +1032,18 @@ void ziplistRepr(unsigned char *zl) {
             entry.prevrawlen,
             entry.prevrawlensize,
             entry.len);
+
         p += entry.headersize;
+
         if (ZIP_IS_STR(entry.encoding)) {
             if (entry.len > 40) {
-                if (fwrite(p,40,1,stdout) == 0) perror("fwrite");
+                if (fwrite(p, 40, 1, stdout) == 0) perror("fwrite");
                 printf("...");
             } else {
-                if (entry.len &&
-                    fwrite(p,entry.len,1,stdout) == 0) perror("fwrite");
+                if (entry.len && fwrite(p, entry.len, 1, stdout) == 0) perror("fwrite");
             }
         } else {
-            printf("%lld", (long long) zipLoadInteger(p,entry.encoding));
+            printf("%lld", (long long) zipLoadInteger(p, entry.encoding));
         }
         printf("\n");
         p += entry.len;
