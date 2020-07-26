@@ -303,4 +303,6 @@ size_t ziplistBlobLen(unsigned char *zl);
 
 void ziplistRepr(unsigned char *zl);
 
+void ziplistPrevRepr(unsigned char *zl);
+
 #endif
