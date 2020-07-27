@@ -67,29 +67,6 @@ static unsigned int zipEncodeLength(unsigned char *p, unsigned char encoding, un
 }
 
 /**
- * 编码前置节点的长度，并将它写入p
- * 如果p为NULL，那么返回编码len所需的字节数
- * 
- * 复杂度:O(1)
- */
-static unsigned int zipPrevEncodingLength(unsigned char *p, unsigned int len) {
-
-    if (p == NULL) {
-        return (len < ZIP_BIGLEN) ? 1 : sizeof(len) + 1;
-    } else {
-        if (len < ZIP_BIGLEN) {
-            p[0] = len;
-            return 1;
-        } else {
-            p[0] = ZIP_BIGLEN;
-            memcpy(p + 1, &len, sizeof(len));
-            memrev32ifbe(p + 1);
-            return 1 + sizeof(len);
-        }
-    }
-}
-
-/**
  * 前驱节点的长度 len 写入到 p 中
  * 其中p的空间比保存len所需的实际空间要更大
  * 
@@ -117,7 +94,7 @@ static int zipPrevLenByteDiff(unsigned char *p, unsigned int len) {
     unsigned int prevlensize;
     ZIP_DECODE_PREVLENSIZE(p, prevlensize);
     // 计算差
-    return zipPrevEncodingLength(NULL, len) - prevlensize;
+    return zipPrevEncodeLength(NULL, len) - prevlensize;
 }
 
 /**
@@ -240,7 +217,7 @@ static int64_t zipLoadInteger(unsigned char *p, unsigned char encoding) {
         memcpy(&i64, p, sizeof(i64));
         memrev64ifbe(&i64);
         ret = i64;
-    } else if (encoding >= ZIP_INT_IMM_MIN && encoding <= ZIP_INT_IMM_MASK) {
+    } else if (encoding >= ZIP_INT_IMM_MIN && encoding <= ZIP_INT_IMM_MAX) {
         ret = (encoding & ZIP_INT_IMM_MASK) - 1;
     } else {
         assert(NULL);
@@ -270,6 +247,11 @@ static zlentry zipEntry(unsigned char *p) {
     e.p = p;
 
     return e;
+}
+
+zlentry zipEntryGet(unsigned char *p)
+{
+    return zipEntry(p);
 }
 
 /**
@@ -408,7 +390,7 @@ static unsigned char *__ziplistCascadeUpdate(unsigned char *zl, unsigned char *p
 
             // 为获得空间而进行数据移动，复杂度O(N)
             memmove(np + rawlensize, np + next.prevrawlensize, curlen - noffset - next.prevrawlensize - 1);
-            zipPrevEncodingLength(np, rawlen);
+            zipPrevEncodeLength(np, rawlen);
 
             p += rawlen;
             curlen += extra;
@@ -420,7 +402,7 @@ static unsigned char *__ziplistCascadeUpdate(unsigned char *zl, unsigned char *p
             if (next.prevrawlensize > rawlensize) {
                 zipPrevEncodeLengthForceLarge(p + rawlen, rawlen);
             } else {
-                zipPrevEncodeLengthForceLarge(p + rawlen, rawlen);
+                zipPrevEncodeLength(p+rawlen, rawlen);
             }
 
             break;
@@ -777,7 +759,6 @@ unsigned int ziplistGet(unsigned char *p, unsigned char **sstr, unsigned int *sl
 
     // 获取节点
     entry = zipEntry(p);
-
     // 字符串
     if (ZIP_IS_STR(entry.encoding)) {
         if (sstr) {
@@ -863,7 +844,7 @@ unsigned int ziplistCompare(unsigned char *p, unsigned char *sstr, unsigned int 
         /* Raw compare */
         if (entry.len == slen) {
             // O(N)
-            return memcmp(p+entry.headersize,sstr,slen) == 0;
+            return memcmp(p + entry.headersize, sstr, slen) == 0;
         } else {
             return 0;
         }
@@ -871,8 +852,8 @@ unsigned int ziplistCompare(unsigned char *p, unsigned char *sstr, unsigned int 
     } else {
         /* Try to compare encoded values. Don't compare encoding because
          * different implementations may encoded integers differently. */
-        if (zipTryEncoding(sstr,slen,&sval,&sencoding)) {
-          zval = zipLoadInteger(p+entry.headersize,entry.encoding);
+        if (zipTryEncoding(sstr, slen, &sval, &sencoding)) {
+          zval = zipLoadInteger(p + entry.headersize, entry.encoding);
           return zval == sval;
         }
     }
@@ -973,7 +954,7 @@ unsigned int ziplistLen(unsigned char *zl) {
     // 节点的数量 >= UINT16_MAX
     } else {
         // 遍历整个 ziplist ，计算长度
-        unsigned char *p = zl+ZIPLIST_HEADER_SIZE;
+        unsigned char *p = zl + ZIPLIST_HEADER_SIZE;
         while (*p != ZIP_END) {
             p += zipRawEntryLength(p);
             len++;
@@ -1023,7 +1004,8 @@ void ziplistRepr(unsigned char *zl) {
                 "hs %2u, "
                 "pl: %5u, "
                 "pls: %2u, "
-                "payload %5u"
+                "payload %5u, "
+                "encoding: %d"
             "} ",
             (long unsigned)p,
             index,
@@ -1032,7 +1014,8 @@ void ziplistRepr(unsigned char *zl) {
             entry.headersize,
             entry.prevrawlen,
             entry.prevrawlensize,
-            entry.len);
+            entry.len,
+            entry.encoding);
 
         p += entry.headersize;
 

@@ -235,8 +235,6 @@ static unsigned int zipIntSize(unsigned char encoding);
 
 static unsigned int zipEncodeLength(unsigned char *p, unsigned char encoding, unsigned int rawlen);
 
-static unsigned int zipPrevEncodingLength(unsigned char *p, unsigned int len);
-
 static void zipPrevEncodeLengthForceLarge(unsigned char *p, unsigned int len);
 
 static int zipPrevLenByteDiff(unsigned char *p, unsigned int len);
@@ -250,6 +248,7 @@ static void zipSaveInteger(unsigned char *p, int64_t value, unsigned char encodi
 static int64_t zipLoadInteger(unsigned char *p, unsigned char encoding);
 
 static zlentry zipEntry(unsigned char *p);
+
 
 // 创建一个新的压缩列表，O(1)
 unsigned char *ziplistNew(void);
@@ -297,6 +296,8 @@ unsigned char *ziplistFind(unsigned char *p, unsigned char *vstr, unsigned int v
 // 返回压缩列表目前包含的节点数据
 // 节点数量小于 65535 时候为 O(1), 大于 65535为O(N)
 unsigned int ziplistLen(unsigned char *zl);
+
+zlentry zipEntryGet(unsigned char *p);
 
 // 返回压缩列表目前占用的内存字节数，O(1)
 size_t ziplistBlobLen(unsigned char *zl);

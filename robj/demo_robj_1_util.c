@@ -79,7 +79,7 @@ int string2ll(const char *s, size_t slen, long long *value) {
     }
 
     // 第一个数字必须不为0，否则值为0
-    if (p[0] >= '1' && p[0] < '9') {
+    if (p[0] >= '1' && p[0] <= '9') {
         v = p[0] - '0';
         p++; plen++;
     } else if (p[0] == '0' && slen == 1) {
@@ -118,7 +118,7 @@ int string2ll(const char *s, size_t slen, long long *value) {
 
     // 处理返回值的负数情况
     if (negative) {
-        if (v > ((unsigned long long) (-(LLONG_MAX)) + 1)) {    // Overflow
+        if (v > ((unsigned long long) (-(LLONG_MIN + 1)) + 1)) {    // Overflow
             return 0;
         }
         if (value != NULL) *value = -v;
