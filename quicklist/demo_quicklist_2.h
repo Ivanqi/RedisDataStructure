@@ -1,5 +1,6 @@
 #ifndef __QUICKLIST_2_H__
 #define __QUICKLIST_2_H__
+#include <stdio.h>
 
 /**
  * quicklistNode是一个32字节的结构，用于描述快速列表的ziplist
@@ -99,6 +100,18 @@ typedef struct quicklistEntry {
  * 导致比原始数据更大的大小
  */
 #define MIN_COMPRESS_IMPROVE 8
+
+/* If not verbose testing, remove all debug printing. */
+#ifndef REDIS_TEST_VERBOSE
+#define D(...)
+#else
+#define D(...)                                                                 \
+    do {                                                                       \
+        printf("%s:%s:%d:\t", __FILE__, __FUNCTION__, __LINE__);               \
+        printf(__VA_ARGS__);                                                   \
+        printf("\n");                                                          \
+    } while (0);
+#endif
 
 // quicklistEntry构造方法
 #define initEntry(e)                                                           \

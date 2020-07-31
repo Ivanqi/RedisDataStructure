@@ -83,7 +83,7 @@
 
 #ifdef __cplusplus
 #include <cstring>
-#include <cilmits>
+#include <climits>
 using namespace std;
 #else
 #include <string.h>
@@ -112,6 +112,8 @@ typedef unsigned int LZF_HSLOT;
 #define LZF_HSLOT_BIAS 0
 typedef const u8 *LZF_HSLOT;
 #endif
+
+typedef LZF_HSLOT LZF_STATE[1 << (HLOG)];
 
 #if !STRICT_ALIGN
 /* for unaligned accesses we need a 16 bit datatype. */
