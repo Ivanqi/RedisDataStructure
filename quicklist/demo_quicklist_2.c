@@ -6,8 +6,6 @@
 #include "demo_quicklist_2_ziplist.h"
 #include "demo_quicklist_2.h"
 
-static const size_t optimization_level[] = {4096, 8192, 16384, 32768, 65535};
-
 // 创建新的 quicklist
 quicklist *quicklistCreate(void) {
 
@@ -22,7 +20,7 @@ quicklist *quicklistCreate(void) {
     return quicklist;
 }
 
-void quicklistCompressDepth(quicklist *quickllist, int compress) {
+void quicklistSetCompressDepth(quicklist *quicklist, int compress) {
 
     if (compress > COMPRESS_MAX) {
         compress = COMPRESS_MAX;
@@ -44,7 +42,7 @@ void quicklistSetFill(quicklist *quicklist, int fill) {
 
 void quicklistSetOptions(quicklist *quicklist, int fill, int depth) {
 
-    quicklistSetFile(quicklist, fill);
+    quicklistSetFill(quicklist, fill);
     quicklistSetCompressDepth(quicklist, depth);
 }
 
@@ -76,13 +74,13 @@ unsigned long quicklistCount(const quicklist *ql) {
     return ql->count;
 }
 
-void quicklistRelease(quicklist *quicklilst) {
+void quicklistRelease(quicklist *quicklist) {
 
     unsigned long len;
     quicklistNode *current, *next;
 
-    current = quicklilst->head;
-    len = quicklilst->len;
+    current = quicklist->head;
+    len = quicklist->len;
     
     while (len--) {
         next = current->next;
@@ -180,7 +178,6 @@ size_t quicklistGetLzf(const quicklistNode *node, void **data) {
     return lzf->sz;
 }
 
-#define quicklistAllowsCompression(_ql) ((_ql)->compress != 0)
 
 
 /**
@@ -565,8 +562,8 @@ REDIS_STATIC void __quicklistDelNode(quicklist *quicklist, quicklistNode *node) 
 
     quicklist->count -= node->count;
 
-    zfree(node->zl);
-    zfree(node);
+    free(node->zl);
+    free(node);
     quicklist->len--;
 }
 
@@ -778,7 +775,7 @@ REDIS_STATIC quicklistNode *_quicklistSplitNode(quicklistNode *node, int offset,
     size_t zl_sz = node->sz;
 
     quicklistNode *new_node = quicklistCreateNode();
-    new_node->zl = zmalloc(zl_sz);
+    new_node->zl = malloc(zl_sz);
 
     // 复制原始ziplist，以便我们对其进行拆分
     memcpy(new_node->zl, node->zl, zl_sz);

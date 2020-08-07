@@ -5,12 +5,32 @@
 /**
  * quicklistNode是一个32字节的结构，用于描述快速列表的ziplist
  * 我们使用位字段将quicklistNode保持在32字节
- * count: 16位，最大65536（最大zl字节为65k，因此最大计数实际上 < 32k）
- * encoding: 2位，RAW = 1, LZF = 2
- * container: 2位，NONE = 1, ZIPLIST = 2
+ * prev: 指向链表前一个节点的指针
+ * 
+ * next: 指向链表后一个节点的指针
+ * 
+ * zl: 数据指针。如果当前节点的数据没有压缩，那么它指向一个ziplist结构；否则，它指向一个quicklistZF结构
+ * 
+ * sz: 表示zl指向的ziplist的总大小(包括 zlbytes, zltail, zllen, zlend和各个数据项)
+ *  需要注意的是：如果ziplist被压缩了，那么这个sz的值仍然是压缩前的ziplist大小
+ * 
+ * count: 表示ziplist里面包含的数据项个数。16位，最大65536（最大zl字节为65k，因此最大计数实际上 < 32k）
+ * 
+ * encoding: 表示ziplist是否压缩了（以及用了哪个压缩算法，2位，RAW = 1，没有压缩, LZF = 2，使用LZF算法压缩
+ * 
+ * container: 是一个预留字段，2位，NONE = 1, ZIPLIST = 2
+ *  本来设计是用来表明一个quicklist节点下面是直接存数据，还是使用ziplist存数据，或者用其它的结构来存数据（用作一个数据容器，所以叫container）
+ *  但是，在目前的实现中，这个值是一个固定的值2，表示使用ziplist作为数据容器
+ * 
  * recompress: 1位，bool值，如果节点临时解压缩以供使用，则为true
+ *  当我们使用类似lindex这样的命令查看了某一项本来压缩的数据时，需要把数据暂时解压
+ *  这时就设置recompress=1做一个标记，等有机会再把数据重新压缩
+ * 
  * attempted_compress：1位 ,bool值，用于测试期间的验证
+ *  这个值只对Redis的自动化测试程序有用
+ * 
  * extra：10位，免费供将来使用；将剩下的32位补出来
+ *  其它扩展字段
  */
 typedef struct quicklistNode {
     struct quicklistNode *prev;
@@ -27,8 +47,9 @@ typedef struct quicklistNode {
 
 /**
  * quicklistLZF是一个4+N字节的结构，包含“sz”和“compressed”
- * “sz”是“compressed”字段的字节长度
- * “compressed”是总长度为“sz”的LZF数据
+ * sz：compressed字段的字节长度
+ * compressed: 总长度为“sz”的LZF数据
+ *  柔性数组（flexible array member），存放压缩后的ziplist字节数组  
  * 注意
  *  未压缩的长度存储在quicklistNode->sz中
  *  当quicklistNode->zl被压缩时，node->zl指向一个quicklistLZF
@@ -40,10 +61,14 @@ typedef struct quicklistLZF {
 
 /**
  * quicklist是一个40字节的结构（在64位系统上）
- * “count”是总条目数
- * “len”是快表节点的数量
- * “compress”为-1，如果禁用压缩，则为在快速列表末尾保留未压缩的quickListNode数
- * “fill”是用户请求的（或默认）填充因子
+ * head: 指向头节点的指针
+ * tail: 指向尾节点的指针
+ * count: 所有ziplist数据项的个数总和
+ * len: quicklist 节点的个数
+ * compress：16bit, ziplist大小设置，存放list-max-ziplist-size参数的值
+ *  值为-1，如果禁用压缩，则为在快速列表末尾保留未压缩的quickListNode数
+ * fill: 16bit,ziplist大小设置，存放list-compress-depth参数的值
+ *  是用户请求的（或默认）填充因子
  */
 typedef struct quicklist {
     quicklistNode *head;
@@ -65,9 +90,10 @@ typedef struct quicklistIter {
 typedef struct quicklistEntry {
     const quicklist *quicklist;
     quicklistNode *node;
-    unsigned char *zl;
+    unsigned char *zi;
     unsigned char *value;
     long long longval;
+    unsigned int sz;
     int offset;
 } quicklistEntry;
 
@@ -87,6 +113,8 @@ typedef struct quicklistEntry {
 #ifndef REDIS_STATIC
 #define REDIS_STATIC static
 #endif
+
+static const size_t optimization_level[] = {4096, 8192, 16384, 32768, 65535};
 
 // 任何多元素ziplist的最大字节大小
 #define SIZE_SAFETY_LIMIT 8192
@@ -136,7 +164,9 @@ typedef struct quicklistEntry {
 
 #define FILE_MAX (1 << 15)
 
-// 接口
+#define quicklistAllowsCompression(_ql) ((_ql)->compress != 0)
+
+// // 接口
 quicklist *quicklistCreate(void);
 
 quicklist *quicklistNew(int fill, int compress);
@@ -199,5 +229,7 @@ int quicklistCompare(unsigned char *p1, unsigned char *p2, int p2_len);
 
 size_t quicklistGetLzf(const quicklistNode *node, void **data);
 
+#define AL_START_HEAD 0
+#define AL_START_TAIL 1
 
 #endif

@@ -26,7 +26,6 @@ static unsigned int zipIntSize(unsigned char encoding) {
     return 0;
 }
 
-
 unsigned int zipStoreEntryEncoding(unsigned char *p, unsigned char encoding, unsigned int rawlen) {
     unsigned char len = 1, buf[5];
 

@@ -1,6 +1,7 @@
 TARGET2 := redis5-quicklist
-CFLAGS := -g -lm
+CFLAGS := -g -lm -std=c99
 INCLUDE := -I ./
+CXX := gcc
 
 $(TARGET2): demo_quick_2_lzf_c.c demo_quick_2_lzf_d.c demo_quicklist_2_endianconv.c demo_quicklist_2_util.c demo_quicklist_2_ziplist.c demo_quicklist_2.c demo_quicklist_2_test.c
 	$(CXX) $(CFLAGS) $(INCLUDE) -o $@ $^
