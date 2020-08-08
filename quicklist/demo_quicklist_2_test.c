@@ -88,6 +88,7 @@ static int _itrprintr(quicklist *ql, int print, int forward) {
         if (print) {
             printf("[%3d (%2d)]: [%.*s] (%lld)\n", i, p, entry.sz, (char *)entry.value, entry.longval);
         }
+        i++;
     }
 
     quicklistReleaseIterator(iter);
@@ -125,13 +126,16 @@ static int _ql_verify(quicklist *ql, uint32_t len, uint32_t count, uint32_t head
         errors++;
     }
 
+    // 从左向右遍历，计算个数
     int loopr = itrprintr(ql, 0);
     if (loopr != (int)ql->count) {
         yell("quiclist cached count not match actual count: expected %lu, got %d", ql->count, loopr);
         errors++;
     }
 
+    // 从右向做遍历，计算个数
     int rlooper = itrprintr_rev(ql, 0);
+    // printf("looper:%d, rlooper:%d\n", loopr, rlooper);
     if (loopr != rlooper) {
         yell("quicklist has different forward count than reverse count! Forward count is %d, reverse count is %d.", loopr, rlooper);
         errors++;
@@ -142,6 +146,7 @@ static int _ql_verify(quicklist *ql, uint32_t len, uint32_t count, uint32_t head
         return errors;
     }
 
+    // head_count 和  ql->head->count(quicklistNode) 数量 不匹配。 同时  head_count 和 ziplist的数量不匹配
     if (ql->head && head_count != ql->head->count && head_count != ziplistLen(ql->head->zl)) {
         yell("quicklist head count wrong: expected %d, "
              "got cached %d vs. actual %d",
@@ -149,6 +154,7 @@ static int _ql_verify(quicklist *ql, uint32_t len, uint32_t count, uint32_t head
         errors++;
     }
 
+    // tail_count 和  ql->tail->count(quicklistNode) 数量 不匹配。 同时  tail_count 和 ziplist的数量不匹配
     if (ql->tail && tail_count != ql->tail->count && tail_count != ziplistLen(ql->tail->zl)) {
         yell("quicklist tail count wrong: expected %d, "
              "got cached %u vs. actual %d",
@@ -156,6 +162,7 @@ static int _ql_verify(quicklist *ql, uint32_t len, uint32_t count, uint32_t head
         errors++;
     }
 
+    // quicklist开启压缩的情况
     if (quicklistAllowsCompression(ql)) {
         quicklistNode *node = ql->head;
         unsigned int low_raw = ql->compress;
@@ -189,6 +196,14 @@ static int _ql_verify(quicklist *ql, uint32_t len, uint32_t count, uint32_t head
     return errors;
 }
 
+// 生成新字符串，根据字符串“prefix”连接整数i
+static char *genstr(char *prefix, int i) {
+
+    static char result[64] = {0};
+    snprintf(result, sizeof(result), "%s%d", prefix, i);
+    return result;
+}
+
 
 void test_case_1(int argc, char *argv[]) {
 
@@ -208,11 +223,44 @@ void test_case_1(int argc, char *argv[]) {
         printf("Testing Option %d\n", options[_i]);
         long long start = mstime();
 
-        TEST("create list:");
-        {
+        TEST("create list"); {
             quicklist *ql = quicklistNew(-2, options[_i]);
             ql_verify(ql, 0, 0, 0, 0);
             quicklistRelease(ql);
+        }
+
+        TEST("add to tail of empty list"); {
+            quicklist *ql = quicklistNew(-2, options[_i]);
+            quicklistPushTail(ql, "hello", 6);
+            // 1 for head and 1 for tail because 1 node = head = tail
+            ql_verify(ql, 1, 1, 1, 1);
+            quicklistRelease(ql);
+        }
+
+        TEST("add to head of empty list"); {
+            quicklist *ql = quicklistNew(-2, options[_i]);
+            quicklistPushHead(ql, "hello", 6);
+            // 1 for head and 1 for tail because 1 node = head = tail
+            quicklistRelease(ql);
+        }
+
+        for (int f = optimize_start; f < 32; f++) {
+            TEST_DESC("add to tail 5x at fill %d at compress %d", f, options[_i]); {
+                quicklist *ql = quicklistNew(f, options[_i]);
+                for (int i = 0; i < 5; i++) {
+                    quicklistPushTail(ql, genstr("hello", i), 32);
+                }
+
+                if (ql->count != 5) {
+                    ERROR;
+                }
+
+                if (f == 32) {
+                    ql_verify(ql, 1, 5, 5, 5);
+                }
+
+                quicklistRelease(ql);
+            }
         }
     }
 }

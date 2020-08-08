@@ -76,13 +76,13 @@ typedef struct quicklist {
     unsigned long count;
     unsigned long len;
     int fill: 16;
-    unsigned int compress: 16;
+    unsigned int compress: 16; /* depth of end nodes not to compress;0=off */
 } quicklist;
 
 typedef struct quicklistIter {
     const quicklist *quicklist;
     quicklistNode *current;
-    unsigned char *zi;
+    unsigned char *zi;  // 存储通过 ziplistIndex() 获取的ziplist的值
     long offset;
     int direction;
 } quicklistIter;
@@ -90,7 +90,7 @@ typedef struct quicklistIter {
 typedef struct quicklistEntry {
     const quicklist *quicklist;
     quicklistNode *node;
-    unsigned char *zi;
+    unsigned char *zi;  // 存储通过 ziplistIndex() 获取的ziplist的值
     unsigned char *value;
     long long longval;
     unsigned int sz;
@@ -114,6 +114,7 @@ typedef struct quicklistEntry {
 #define REDIS_STATIC static
 #endif
 
+// 优化级别
 static const size_t optimization_level[] = {4096, 8192, 16384, 32768, 65535};
 
 // 任何多元素ziplist的最大字节大小
@@ -153,6 +154,8 @@ static const size_t optimization_level[] = {4096, 8192, 16384, 32768, 65535};
     } while (0)
 
 #if __GNUC__ >= 3   // GCC3.0以上
+// __builtin_expect(!!(x), 1)  这个是说，如果x == 0，那么结果就是 0
+// 如果x == 1， 那么结果就是1，使用了！！是为了让x转化成bool型的
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 #else

@@ -356,6 +356,13 @@ REDIS_STATIC int _quicklistNodeSizeMeetsOptimizationRequirement(const size_t sz,
 
 #define sizeMeetsSafetyLimit(sz) ((sz) <= SIZE_SAFETY_LIMIT)
 
+/*
+ * 判断是否允许插入数据
+ * 判断标准
+ *  1. new_sz 小于 optimization_level
+ *  2. new_sz 小于 SIZE_SAFETY_LIMIT(8192)
+ *  3. quicklistNode 节点数量数量小于 fill
+ */
 REDIS_STATIC int _quicklistNodeAllowInsert(const quicklistNode *node, const int fill, const size_t sz) {
 
     if (unlikely(!node)) {
@@ -414,6 +421,7 @@ REDIS_STATIC int _quicklistNodeAllowMerge(const quicklistNode *a, const quicklis
     }
 }
 
+// 更新ziplist 的 数量
 #define quicklistNodeUpdateSz(node)                                            \
     do {                                                                       \
         (node)->sz = ziplistBlobLen((node)->zl);                               \
@@ -433,7 +441,6 @@ int quicklistPushHead(quicklist *quicklist, void *value, size_t sz) {
     if (likely(_quicklistNodeAllowInsert(quicklist->head, quicklist->fill, sz))) {
         quicklist->head->zl = ziplistPush(quicklist->head->zl, value, sz, ZIPLIST_HEAD);
         quicklistNodeUpdateSz(quicklist->head);
-
     } else {
         quicklistNode *node = quicklistCreateNode();
         node->zl = ziplistPush(ziplistNew(), value, sz, ZIPLIST_HEAD);
@@ -460,7 +467,6 @@ int quicklistPushTail(quicklist *quicklist, void *value, size_t sz) {
     if (likely(_quicklistNodeAllowInsert(quicklist->tail, quicklist->fill, sz))) {
         quicklist->tail->zl = ziplistPush(quicklist->tail->zl, value, sz, ZIPLIST_TAIL);
         quicklistNodeUpdateSz(quicklist->tail);
-
     } else {
         quicklistNode *node = quicklistCreateNode();
         node->zl = ziplistPush(ziplistNew(), value, sz, ZIPLIST_TAIL);
@@ -1125,7 +1131,7 @@ int quicklistNext(quicklistIter *iter, quicklistEntry *entry) {
     entry->node = iter->current;
 
     if (!iter->current) {
-        D("Returning because current node is NULL")
+        D("Returning because current node is NULL");
         return 0;
     }
 
