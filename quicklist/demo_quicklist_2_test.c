@@ -1,6 +1,9 @@
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <sys/time.h>
+#include <assert.h>
+#include <string.h>
 #include "demo_quicklist_2_ziplist.h"
 #include "demo_quicklist_2.h"
 
@@ -170,6 +173,7 @@ static int _ql_verify(quicklist *ql, uint32_t len, uint32_t count, uint32_t head
 
         for (unsigned int at = 0; at < ql->len; at++, node = node->next) {
             if (node && (at < low_raw || at >= high_raw)) {
+                // 未设置压缩标识
                 if (node->encoding != QUICKLIST_NODE_ENCODING_RAW) {
                     yell("Incorrect compression: node %d is "
                          "compressed at depth %d ((%u, %u); total "
@@ -179,11 +183,12 @@ static int _ql_verify(quicklist *ql, uint32_t len, uint32_t count, uint32_t head
                     errors++;
                 }
             } else {
+                // 已经开始开启压缩标识
                 if (node->encoding != QUICKLIST_NODE_ENCODING_LZF && !node->attempted_compress) {
                     yell("Incorrect non-compression: node %d is NOT "
                          "compressed at depth %d ((%u, %u); total "
-                         "nodes: %u; size: %u; recompress: %d; attempted: %d)",
-                         at, ql->compress, low_raw, high_raw, ql->len, node->sz,
+                         "nodes: %u; size: %u; encoding: %d; recompress: %d; attempted: %d)",
+                         at, ql->compress, low_raw, high_raw, ql->len, node->sz, node->encoding,
                          node->recompress, node->attempted_compress);
                     errors++;
                 }
@@ -262,6 +267,209 @@ void test_case_1(int argc, char *argv[]) {
                 quicklistRelease(ql);
             }
         }
+
+        for (int f = optimize_start; f < 32; f++) {
+            TEST_DESC("add to head 5x at fill %d at compress %d", f, options[_i]); {
+                quicklist *ql = quicklistNew(f, options[_i]);
+                for (int i = 0; i < 5; i++) {
+                    quicklistPushHead(ql, genstr("hello", i), 32);
+                }
+
+                if (ql->count != 5) {
+                    ERROR;
+                }
+
+                if (f == 32) {
+                    ql_verify(ql, 1, 5, 5, 5);
+                }
+            }
+        }
+
+        for (int f = optimize_start; f < 512; f++) {
+            TEST_DESC("add to tail 500x at fill %d compress %d", f, options[_i]); {
+                quicklist *ql = quicklistNew(f, options[_i]);
+                for (int i = 0; i < 500; i++) {
+                    quicklistPushTail(ql, genstr("hello", i), 64);
+                }
+
+                if (ql->count != 500) {
+                    ERROR;
+                }
+
+                if (f == 32) {
+                    ql_verify(ql, 16, 500, 32, 20);
+                }
+
+                quicklistRelease(ql);
+            }
+        }
+
+        for (int f = optimize_start; f < 512; f++) {
+            TEST_DESC("add to head 500x at fill %d at compress %d", f, options[_i]); {
+                quicklist *ql = quicklistNew(f, options[_i]);
+
+                for (int i = 0; i < 500; i++) {
+                    quicklistPushHead(ql, genstr("hello", i), 64);
+                }
+
+                if (ql->count != 500) {
+                    ERROR;
+                }
+
+                if (f == 32) {
+                    ql_verify(ql, 16, 500, 32, 20);
+                }
+
+                quicklistRelease(ql);
+            }
+        }
+
+        TEST("rotate empty"); {
+            quicklist *ql = quicklistNew(-2, options[_i]);
+            quicklistRotate(ql);
+            ql_verify(ql, 0, 0, 0, 0);
+            quicklistRelease(ql);
+        }
+
+        for (int f = optimize_start; f < 32; f++) {
+            TEST("rotate one val once"); {
+                quicklist *ql = quicklistNew(f, options[_i]);
+                quicklistPushHead(ql, "hello", 6);
+                quicklistRotate(ql);
+                // 忽略压缩验证，因为ziplist太小而无法压缩
+                ql_verify(ql, 1, 1, 1, 1);
+                quicklistRelease(ql);
+            }
+        }
+
+        for (int f = optimize_start; f < 3; f++) {
+            TEST_DESC("rotate 500 val 5000 times at fill %d at compress %d", f, options[_i]);
+            quicklist *ql = quicklistNew(f, options[_i]);
+            quicklistPushHead(ql, "900", 3);
+            quicklistPushHead(ql, "7000", 4);
+            quicklistPushHead(ql, "-1200", 5);
+            quicklistPushHead(ql, "42", 2);
+
+            for (int i = 0; i < 500; i++) {
+                quicklistPushHead(ql, genstr("hello", i), 64);
+            }
+
+            ql_info(ql);
+
+            for (int i = 0; i < 5000; i++) {
+                ql_info(ql);
+                quicklistRotate(ql);
+            }
+
+            if (f == 1) {
+                ql_verify(ql, 504, 504, 1, 1);
+            } else if (f == 2) {
+                ql_verify(ql, 252, 504, 2, 2);
+            } else if (f == 32) {
+                ql_verify(ql, 16, 504, 32, 24);
+            }
+
+            quicklistRelease(ql);
+        }
+
+        TEST("pop empty"); {
+            quicklist *ql = quicklistNew(-2, options[_i]);
+            quicklistPop(ql, QUICKLIST_HEAD, NULL, NULL, NULL);
+            ql_verify(ql, 0, 0, 0, 0);
+            quicklistRelease(ql);
+        }
+
+        TEST("pop 1 string from 1"); {
+            quicklist *ql = quicklistNew(-2, options[_i]);
+            char *populate = genstr("hello", 331);
+            quicklistPushHead(ql, populate, 32);
+
+            unsigned char *data;
+            unsigned int sz;
+            long long lv;
+            ql_info(ql);
+
+            quicklistPop(ql, QUICKLIST_HEAD, &data, &sz, &lv);
+            assert(data != NULL);
+            assert(sz == 32);
+
+            if (strcmp(populate, (char *)data)) {
+                ERR("Pop'd value (%.*s) didn't equal original value (%s)", sz, data, populate);
+            }
+
+            free(data);
+            ql_verify(ql, 0, 0, 0, 0);
+            quicklistRelease(ql);
+        }
+
+        TEST("pop head 1 number from 1"); {
+            quicklist *ql = quicklistNew(-2, options[_i]);
+            quicklistPushHead(ql, "55513", 5);
+            unsigned char *data;
+            unsigned int sz;
+            long long lv;
+            ql_info(ql);
+
+            quicklistPop(ql, QUICKLIST_HEAD, &data, &sz, &lv);
+            assert(data == NULL);
+            assert(lv == 55513);
+            ql_verify(ql, 0, 0, 0, 0);
+            quicklistRelease(ql);
+        }
+
+        TEST("pop head 500 from 500"); {
+            quicklist *ql = quicklistNew(-2, options[_i]);
+            for (int i = 0; i < 500; i++) {
+                quicklistPushHead(ql, genstr("hello", i), 32);
+            }
+
+            ql_info(ql);
+
+            for (int i = 0; i < 500; i++) {
+                unsigned char *data;
+                unsigned int sz;
+                long long lv;
+                int ret = quicklistPop(ql, QUICKLIST_HEAD, &data, &sz, &lv);
+                assert(ret == 1);
+                assert(data != NULL);
+                assert(sz == 32);
+                if (strcmp(genstr("hello", 499 - i), (char *)data)) {
+                    ERR("Pop'd value (%.*s) didn't equal original value (%s)", sz, data, genstr("hello", 499 - i));
+                }
+                free(data);
+            }
+            ql_verify(ql, 0, 0, 0, 0);
+            quicklistRelease(ql);
+        }
+
+        TEST("pop head 5000 from 500"); {
+            quicklist *ql = quicklistNew(-2, options[_i]);
+            for (int i = 0; i < 500; i++) {
+                quicklistPushHead(ql, genstr("hello", i), 32);
+            }
+
+            for (int i = 0; i < 5000; i++) {
+                unsigned char *data;
+                unsigned int sz;
+                long long lv;
+
+                int ret = quicklistPop(ql, QUICKLIST_HEAD, &data, &sz, &lv);
+                if (i < 500) {
+                    assert(ret == 1);
+                    assert(data != NULL);
+                    assert(sz == 32);
+                    if (strcmp(genstr("hello", 499 - i), (char *)data)) {
+                        ERR("Pop'd value (%.*s) didn't equal original value ", "(%s)", sz, data, genstr("hello", 499 - i));
+                    }
+                    free(data);
+                } else {
+                    assert(ret == 0);
+                }
+            }
+            ql_verify(ql, 0, 0, 0, 0);
+            quicklistRelease(ql);
+        }
+
     }
 }
 

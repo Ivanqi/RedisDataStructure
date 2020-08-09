@@ -65,11 +65,32 @@ typedef struct quicklistLZF {
  * tail: 指向尾节点的指针
  * count: 所有ziplist数据项的个数总和
  * len: quicklist 节点的个数
- * compress：16bit, ziplist大小设置，存放list-max-ziplist-size参数的值
+ * compress：16bit, ziplist大小设置，存放list-compress-depth参数的值
  *  值为-1，如果禁用压缩，则为在快速列表末尾保留未压缩的quickListNode数
- * fill: 16bit,ziplist大小设置，存放list-compress-depth参数的值
+ *  list-compress-depth
+ *      0: 是个特殊值，表示都不压缩。这是Redis的默认值。
+ *      1: 表示quicklist两端各有1个节点不压缩，中间的节点压缩
+ *      2: 表示quicklist两端各有2个节点不压缩，中间的节点压缩
+ *      3: 表示quicklist两端各有3个节点不压缩，中间的节点压缩
+ *      依此类推...
+ *  
+ * 
+ * fill: 16bit,ziplist大小设置，存放list-max-ziplist-size参数的值
  *  是用户请求的（或默认）填充因子
+ *  list-max-ziplist-size
+ *      这个参数的含义。它可以取正值，也可以取负值
+ *      当取正值的时候，表示按照数据项个数来限定每个quicklist节点上的ziplist长度
+ *          比如，当这个参数配置成5的时候，表示每个quicklist节点的ziplist最多包含5个数据项。
+ *      
+ *      当取负值的时候，表示按照占用字节数来限定每个quicklist节点上的ziplist长度。这时，它只能取-1到-5这五个值
+ *          -5: 每个quicklist节点上的ziplist大小不能超过64 Kb。（注：1kb => 1024 bytes）
+ *          -4: 每个quicklist节点上的ziplist大小不能超过32 Kb
+ *          -3: 每个quicklist节点上的ziplist大小不能超过16 Kb
+ *          -2: 每个quicklist节点上的ziplist大小不能超过8 Kb。（-2是Redis给出的默认值）
+ *          -1: 每个quicklist节点上的ziplist大小不能超过4 Kb
+ *      
  */
+
 typedef struct quicklist {
     quicklistNode *head;
     quicklistNode *tail;
@@ -78,6 +99,9 @@ typedef struct quicklist {
     int fill: 16;
     unsigned int compress: 16; /* depth of end nodes not to compress;0=off */
 } quicklist;
+
+// 优化级别
+static const size_t optimization_level[] = {4096, 8192, 16384, 32768, 65535};
 
 typedef struct quicklistIter {
     const quicklist *quicklist;
@@ -114,8 +138,7 @@ typedef struct quicklistEntry {
 #define REDIS_STATIC static
 #endif
 
-// 优化级别
-static const size_t optimization_level[] = {4096, 8192, 16384, 32768, 65535};
+#define REDIS_TEST
 
 // 任何多元素ziplist的最大字节大小
 #define SIZE_SAFETY_LIMIT 8192

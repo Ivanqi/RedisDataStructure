@@ -103,6 +103,10 @@ void quicklistRelease(quicklist *quicklist) {
  */
 REDIS_STATIC int __quicklistCompressNode(quicklistNode *node) {
 
+#ifdef REDIS_TEST
+    node->attempted_compress = 1;
+#endif
+
     // 小于压缩最小值，不压缩
     if (node->sz < MIN_COMPRESS_BYTES) return 0;
 
@@ -283,32 +287,46 @@ REDIS_STATIC void __quicklistCompress(const quicklist *quicklist, quicklistNode 
 REDIS_STATIC void __quicklistInsertNode(quicklist *quicklist, quicklistNode *old_node, quicklistNode *new_node, int after) {
 
     if (after) {
+        // new_node->prev指针 指向 old_node
         new_node->prev = old_node;
 
+        // 如果old_node不为空
         if (old_node) {
+            // new_node 的 next 指针 指向 old_node->next 指针。new_node 替换 old_node的位置
             new_node->next = old_node->next;
+            // old_node->next指针不为空
             if (old_node->next) {
+                // old_node->next->prev 指针，指向new_node。 new_node 替换 old_node的为止
                 old_node->next->prev = new_node;
             }
+            //old_node->next指针指向new_node
             old_node->next = new_node;
         }
 
         if (quicklist->tail == old_node) {
+            // 把 new_node 指针，更新到tail
             quicklist->tail = new_node;
         }
             
     } else {
+        // new_node->next指针 指向 old_node
         new_node->next = old_node;
 
+        // 如果old_node不为空
         if (old_node) {
+            // new_node->prev指针，接管 old_node->prev指针的内容
             new_node->prev = old_node->prev;
+            // 如果old_node->prev指针不为空
             if (old_node->prev) {
+                // old_node->prev->next指针为 new_node
                 old_node->prev->next = new_node;
             }
+            // old_node->prev 指针指向 new_node
             old_node->prev = new_node;
         }
 
         if (quicklist->head == old_node) {
+            // 把 new_node 指针，更新到 head中
             quicklist->head = new_node;
         }
             
@@ -343,6 +361,7 @@ REDIS_STATIC int _quicklistNodeSizeMeetsOptimizationRequirement(const size_t sz,
     }
 
     size_t offset = (-fill) - 1;
+    // offset 小于 optimization_level 元素个数
     if (offset < (sizeof(optimization_level) / sizeof(*optimization_level))) {
         if (sz <= optimization_level[offset]) {
             return 1;
@@ -359,9 +378,10 @@ REDIS_STATIC int _quicklistNodeSizeMeetsOptimizationRequirement(const size_t sz,
 /*
  * 判断是否允许插入数据
  * 判断标准
- *  1. new_sz 小于 optimization_level
- *  2. new_sz 小于 SIZE_SAFETY_LIMIT(8192)
- *  3. quicklistNode 节点数量数量小于 fill
+ *  1. node 不能为NULL
+ *  2. new_sz 小于 optimization_level
+ *  3. new_sz 小于 SIZE_SAFETY_LIMIT(8192)
+ *  4. quicklistNode 节点数量数量小于 fill
  */
 REDIS_STATIC int _quicklistNodeAllowInsert(const quicklistNode *node, const int fill, const size_t sz) {
 
@@ -430,6 +450,9 @@ REDIS_STATIC int _quicklistNodeAllowMerge(const quicklistNode *a, const quicklis
 
 /**
  * 如何向快表的头节点添加新条目
+ *   如果判断quicklist 的 node 节点不被允许插入数据
+ *   则会新增加一个 node 节点
+ *   最后才会往zl追加新数据
  * 
  * 如果使用了现有头，则返回0
  * 如果创建了新的头，则返回1
@@ -457,6 +480,9 @@ int quicklistPushHead(quicklist *quicklist, void *value, size_t sz) {
 
 /**
  * 向快表的尾部节点添加新条目
+ *  如果判断quicklist 的 node 节点不被允许插入数据
+ *  则会新增加一个 node 节点
+ *  最后才会往zl追加新数据
  * 
  * 如果使用现有尾部，则返回0
  * 如果创建了新的尾部，则返回1
@@ -1158,6 +1184,7 @@ int quicklistNext(quicklistIter *iter, quicklistEntry *entry) {
     entry->zi = iter->zi;
     entry->offset = iter->offset;
 
+    // 如果迭代器的zi不为NULL，从ziplist中获取值
     if (iter->zi) {
         // 从现有的ziplist位置填充值
         ziplistGet(entry->zi, &entry->value, &entry->sz, &entry->longval);
@@ -1290,11 +1317,12 @@ int quicklistIndex(const quicklist *quicklist, const long long idx, quicklistEnt
     return 1;
 }
 
-// 通过将尾部元素移到头部来旋转快速列表
+// 通过将尾部元素移到头部来旋转快表
 void quicklistRotate(quicklist *quicklist) {
 
-    if (quicklist->count <= 1)
+    if (quicklist->count <= 1) {
         return;
+    }
 
     // 首先，获取尾部条目
     unsigned char *p = ziplistIndex(quicklist->tail->zl, -1);
@@ -1305,6 +1333,7 @@ void quicklistRotate(quicklist *quicklist) {
     ziplistGet(p, &value, &sz, &longval);
 
     // 如果找到的值为NULL，则使用ziplistGet填充longval代替
+    // 不是字符串而是数字的情况
     if (!value) {
         /* Write the longval as a string so we can re-add it */
         sz = ll2string(longstr, sizeof(longstr), longval);
@@ -1363,6 +1392,7 @@ int quicklistPopCustom(quicklist *quicklist, int where, unsigned char **data, un
     }
 
     quicklistNode *node;
+    
     if (where == QUICKLIST_HEAD && quicklist->head) {
         node = quicklist->head;
     } else if (where == QUICKLIST_TAIL && quicklist->tail) {

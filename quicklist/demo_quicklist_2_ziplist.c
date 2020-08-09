@@ -231,7 +231,6 @@ int64_t zipLoadInteger(unsigned char *p, unsigned char encoding) {
  */
 void zipEntry(unsigned char *p, zlentry *e) {
 
-
     // 取出前一个节点的长度
     ZIP_DECODE_PREVLEN(p, e->prevrawlensize, e->prevrawlen);
     
