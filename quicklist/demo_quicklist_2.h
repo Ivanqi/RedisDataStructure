@@ -94,7 +94,7 @@ typedef struct quicklistLZF {
 typedef struct quicklist {
     quicklistNode *head;
     quicklistNode *tail;
-    unsigned long count;
+    unsigned long count; 
     unsigned long len;
     int fill: 16;
     unsigned int compress: 16; /* depth of end nodes not to compress;0=off */

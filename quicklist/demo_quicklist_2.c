@@ -1045,10 +1045,11 @@ void quicklistInsertAfter(quicklist *quicklist, quicklistEntry *entry, void *val
  * 从快表中删除一系列元素
  * 元素可能跨越多个quicklistNodes, 因此我们必须谨慎跟踪起点和终点 
  * 
- * 如果删除了条目，则返回1： 如果未删除任何内容，则返回0
+ * 如果删除了条目，则返回1
+ * 如果未删除任何内容，则返回0
  */
-int quicklistDelRange(quicklist *quicklist, const long start,
-                      const long count) {
+int quicklistDelRange(quicklist *quicklist, const long start, const long count) {
+
     if (count <= 0) {
         return 0;
     }
@@ -1078,22 +1079,21 @@ int quicklistDelRange(quicklist *quicklist, const long start,
 
         unsigned long del;
         int delete_entire_node = 0;
+        
         if (entry.offset == 0 && extent >= node->count) {
             /**
-             * 如果要删除的节点数超过此节点的数目，则可以删除整个节点而无需 ziplist math
+             * 整个节点的元素被删除
              */
             delete_entire_node = 1;
             del = node->count;
         } else if (entry.offset >= 0 && extent >= node->count) {
             /**
-             * 如果要在此之后删除更多节点，请根据当前节点的大小来计算删除
+             * 删除 [entry.offset, node->count]的数据
              */
             del = node->count - entry.offset;
         } else if (entry.offset < 0) {
             /**
-             * 如果offset为负，则在此循环的第一次运行中，我们将删除从 start offset 到 list 末尾整个范围
-             * 
-             * 由于负偏移量是到列表末尾的元素数量，因此直接将其用作删除计数 
+             * 如果offset是负数，那么从 quicklist->tail 的 ziplist的末尾开始遍历数据数据，获取要删除的范围
              */
             del = -entry.offset;
 
@@ -1106,6 +1106,7 @@ int quicklistDelRange(quicklist *quicklist, const long start,
         } else {
             /**
              * 否则，我们删除的范围小于此节点的范围，因此请直接使用范围
+             * 删除 [entry.offset, extent]的数据
              */
             del = extent;
         }
@@ -1117,21 +1118,26 @@ int quicklistDelRange(quicklist *quicklist, const long start,
         if (delete_entire_node) {
             __quicklistDelNode(quicklist, node);
         } else {
+            // 解密
             quicklistDecompressNodeForUse(node);
+
+            // ziplist 范围删除
             node->zl = ziplistDeleteRange(node->zl, entry.offset, del);
+
             quicklistNodeUpdateSz(node);
             node->count -= del;
             quicklist->count -= del;
+            
+            // 如果节点元素数量为空，那么直接删除
             quicklistDeleteIfEmpty(quicklist, node);
             if (node) {
+                // 节点没有删除, 加密
                 quicklistRecompressOnly(quicklist, node);
             }
         }
 
         extent -= del;
-
         node = next;
-
         entry.offset = 0;
     }
 
@@ -1300,10 +1306,10 @@ quicklist *quicklistDup(quicklist *orig) {
 
     copy = quicklistNew(orig->fill, orig->compress);
 
-    for (quicklistNode *current = orig->head; current;
-         current = current->next) {
+    for (quicklistNode *current = orig->head; current; current = current->next) {
         quicklistNode *node = quicklistCreateNode();
 
+        // 复制ziplist
         if (current->encoding == QUICKLIST_NODE_ENCODING_LZF) {
             quicklistLZF *lzf = (quicklistLZF *)current->zl;
             size_t lzf_sz = sizeof(*lzf) + lzf->sz;
@@ -1314,11 +1320,13 @@ quicklist *quicklistDup(quicklist *orig) {
             memcpy(node->zl, current->zl, current->sz);
         }
 
+        // 复制quicklistNode 的属性
         node->count = current->count;
         copy->count += node->count;
         node->sz = current->sz;
         node->encoding = current->encoding;
 
+        // 向尾节点插入数据
         _quicklistInsertNodeAfter(copy, copy->tail, node);
     }
 
