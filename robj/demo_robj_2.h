@@ -14,7 +14,7 @@
 #define OBJ_ENCODING_INT 1      // string采用数字的表示方式，实际是long类型
 #define OBJ_ENCODING_EMBSTR 8   // string采用一种特殊的嵌入式的sds来表示
 
-#define OBJ_ENCODING_EMBSTR_SIZE_LIMIT 14
+#define OBJ_ENCODING_EMBSTR_SIZE_LIMIT 44
 
 
 #define CONFIG_DEFAULT_HZ 10

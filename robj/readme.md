@@ -9,7 +9,7 @@
   - 一个database内的这个映射关系是用一个dict来维护的
   - dict的key固定用一种数据结构来表达就够了，这就是动态字符串sds
   - 而value则比较复杂，为了在同一个dict内能够存储不同类型的value，就需要一个通过的数据结构，这个通用的数据结构就是robj(redisObject)
-    - 举个列子
+    - 举个例子
       - 如果value是一个list，那么它的内部存储结构是一个quicklist
       - 如果value是一个string，那么它的内部结构一般情况下是一个sds
       - 如果它的是一个数字，那么Redis内部还会把它转成long型存储，从而减小内存使用
@@ -68,7 +68,7 @@ typedef struct redisObject {
 | 类型 | 编码 | 对象|
 | --- | --- | --- |
 |OBJ_STRING|OBJ_ENCODING_INT|使用整数数值实现的字符串对象|
-|OBJ_STRING|OBJ_ENCODING_EMBSTR|使用emstr编码(SDS)的简单字符串实现的字符串对象|
+|OBJ_STRING|OBJ_ENCODING_EMBSTR|使用emstr编码的简单字符串实现的字符串对象|
 |OBJ_STRING|OBJ_ENCODING_RAW|使用简单动态字符串实现的字符串对象|
 |OBJ_LIST|OBJ_ENCODING_ZIPLIST|使用压缩列表实现的列表对象|
 |OBJ_LIST|OBJ_ENCODING_LINKEDLIST|使用双端链表实现的列表对象|
