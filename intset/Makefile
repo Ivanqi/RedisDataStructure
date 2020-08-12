@@ -1,5 +1,5 @@
 TARGET1 := redis2-intset
-TARGET1 := redis5-intset
+TARGET2 := redis5-intset
 CFLAGS := -g -lm
 INCLUDE := -I ./
 

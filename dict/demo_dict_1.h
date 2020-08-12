@@ -32,6 +32,9 @@ typedef struct dictType {
 
     // 复制键的函数
     void *(*keyDup)(void *privdata, const void *key);
+
+    // 复制值的函数
+    void *(*valDup)(void *privdata, const void *obj);
     
     // 对比两个键的函数
     int (*keyCompare)(void *privdata, const void *key1, const void *key2);
@@ -53,7 +56,7 @@ typedef struct dictht {
     unsigned long size;
 
     // 指针数组的长度掩码
-    unsigned long sizemark;
+    unsigned long sizemask;
 
     // 哈希表现在的节点数量
     unsigned long used;
@@ -70,13 +73,13 @@ typedef struct dict {
     dictType *type;
 
     // 类型处理函数的私有数量
-    void *privdate;
+    void *privdata;
 
     // 哈希表(2个)
     dictht ht[2];
 
     // 记录rehash 进度的标志，值为-1，表示rehash 未进行
-    int rehashindex;
+    int rehashidx;
 
     // 当前正在运行的安全迭代器数量
     int iterators;
@@ -112,7 +115,7 @@ typedef struct dictIterator {
         (d)->type->valDestructor((d)->privdata, (entry)->v.val)
 
 #define dictSetVal(d, entry, _val_) do { \
-    if ((d)->type->valDum) \
+    if ((d)->type->valDup) \
         entry->v.val = (d)->type->valDup((d)->privdata, _val_); \
     else \
         entry->v.val = (_val_); \
@@ -126,18 +129,18 @@ typedef struct dictIterator {
 
 #define dictFreeKey(d, entry)   \
     if ((d)->type->keyDestructor)   \
-        ((d))->type->keyDestructor((d)->private, (entry)->key)
+        ((d))->type->keyDestructor((d)->privdata, (entry)->key)
 
 #define dictSetKey(d, entry, _key_) do {    \
     if ((d)->type->keyDup)  \
-        entry->key  = (d)->type->keyDup((d)->privdate, _key_)   \
+        entry->key  = (d)->type->keyDup((d)->privdata, _key_);   \
     else \
         entry->key = (_key_);   \
 } while (0)
 
 #define dictCompareKeys(d, key1, key2)  \
     (((d)->type->keyCompare) ? \
-        (d)->type->keyCompare((d)->privdate, key1, key2): \
+        (d)->type->keyCompare((d)->privdata, key1, key2): \
         (key1) == (key2))
 
 #define dictHashKey(d, key) (d)->type->hashFunction(key)

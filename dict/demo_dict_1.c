@@ -139,7 +139,7 @@ int _dictInit(dict *d, dictType *type, void *privDataPtr) {
 
     // 初始化字典属性
     d->type = type;
-    d->privdate = privDataPtr;
+    d->privdata = privDataPtr;
     d->rehashidx = -1;
     d->iterators = 0;
 
