@@ -108,7 +108,9 @@ typedef struct dictIterator {
 } dictIterator;
 
 // 所有哈希表的起始大小
-#define DICT_HT_INITAL_SIZE 4
+#define DICT_HT_INITIAL_SIZE 4
+
+#define DICT_HT_MINFILL 10 /* Minimal hash table fill 10% */
 
 #define dictFreeVal(d, entry) \
     if ((d)->type->valDestructor) \
@@ -219,6 +221,7 @@ void dictSetHashFunctionSeed(unsigned int initval);
 
 unsigned int dictGetHashFunctionSeed(void);
 
+int htNeedsResize(dict *dict);
 
 /* Hash table types */
 extern dictType dictTypeHeapStringCopyKey;

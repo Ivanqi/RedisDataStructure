@@ -82,6 +82,13 @@ int strCompare (void *privdata, const void *key1, const void *key2) {
     return strcmp(key1, key2) == 0 ? 1 : 0;
 }
 
+int dictAddWithResize(dict *d, void *key, void *val) {
+    if (!dictIsRehashing(d)) {
+        float load_factor = d->ht[0].size / d->ht[0].used;
+    }
+    return dictAdd(d, key, val);
+}
+
 void test_case_3() {
     dictType *type = (dictType *)malloc(sizeof(dictType));
 

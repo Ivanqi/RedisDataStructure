@@ -157,12 +157,32 @@ int dictResize(dict *d) {
 
     minimal = d->ht[0].used;
 
-    if (minimal < DICT_HT_INITAL_SIZE) {
-        minimal = DICT_HT_INITAL_SIZE;
+    if (minimal < DICT_HT_INITIAL_SIZE) {
+        minimal = DICT_HT_INITIAL_SIZE;
     }
 
     return dictExpand(d, minimal);
 }
+
+/*
+ * 检查字典的使用率是否低于系统允许的最小比率
+ *
+ * 是的话返回 1 ，否则返回 0 。
+ */
+int htNeedsResize(dict *dict) {
+
+    long long size, used;
+
+    // 哈希表大小
+    size = dictSlots(dict);
+
+    // 哈希已用节点数量
+    // 当哈希表的大小大于 DICT_HT_INITIAL_SIZE 
+    // 并且字典的填充率低于 REDIS_HT_MINFILL 时
+    // 返回 1
+    return (size && used && size > DICT_HT_INITIAL_SIZE && (used * 100 / size < DICT_HT_MINFILL));
+}
+
 
 /**
  * 创建一个新哈希表，并视情况，进行以下动作之一
@@ -771,7 +791,7 @@ static int _dictExpandIfNeeded(dict *d) {
     if (dictIsRehashing(d)) return DICT_OK;
 
     // 如果哈希表为空，那么将它扩展为初始大小 O(N)
-    if (d->ht[0].size == 0) return dictExpand(d, DICT_HT_INITAL_SIZE);
+    if (d->ht[0].size == 0) return dictExpand(d, DICT_HT_INITIAL_SIZE);
 
     /**
      * 如果哈希表的已用节点数 >= 哈希表的大小
@@ -798,7 +818,7 @@ static int _dictExpandIfNeeded(dict *d) {
  */
 static unsigned long _dictNextPower(unsigned long size) {
 
-    unsigned long i = DICT_HT_INITAL_SIZE;
+    unsigned long i = DICT_HT_INITIAL_SIZE;
 
     if (size >= LONG_MAX) return LONG_MAX;
 
