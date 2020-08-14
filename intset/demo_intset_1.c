@@ -223,8 +223,8 @@ void intsetMoveTail(intset *is, uint32_t from, uint32_t to) {
         dst = (int32_t *)is->contents + to;
         bytes *= sizeof(int32_t);
     } else {
-        src = (int16_t*)is->contents+from;
-        dst = (int16_t*)is->contents+to;
+        src = (int16_t*)is->contents + from;
+        dst = (int16_t*)is->contents + to;
         bytes *= sizeof(int16_t);
     }
 
