@@ -3,51 +3,102 @@
 #ifndef __DICT_2_H
 #define __DICT_2_H
 
+// 操作返回状态
 #define DICT_OK 0
 #define DICT_ERR 1
 
 #define DICT_NOTUSED(V) ((void) V)
 
+// 哈希表节点
 typedef struct dictEntry {
+    // 键
     void *key;
+    // 值
     union {
         void *val;
         uint64_t u64;
         int64_t s64;
         double d;
     } v;
+    // 链往后继节点
     struct dictEntry *next;
 } dictEntry;
 
+// 特定于类型的一簇处理函数
 typedef struct dictType {
+    // 计算键的哈希值函数，计算key在 hash table中的存储位置，不同的dict可以有不同的hash function
     uint64_t (*hashFunction)(const void *key);
+
+    // 复制键的函数
     void *(*keyDup)(void *privdata, const void *key);
+
+    // 复制值的函数
     void *(*valDup)(void *privdata, const void *obj);
+
+    // 对比两个键的函数
     int (*keyCompare)(void *privdata, const void *key1, const void *key2);
+
+    // 键的析构函数
     void (*keyDestructor)(void *privdata, void *key);
+
+    // 值的析构函数
     void (*valDestructor)(void *privdata, void *key);
 } dictType;
 
+// 哈希表
 typedef struct dictht {
+    // 哈希表节点指针数组(俗称桶，bucket)
     dictEntry **table;
+
+    // 指数数组的大小
     unsigned long size;
+
+    // 指针数组的长度掩码
     unsigned long sizemask;
+    
+    // 哈希表现在的节点数量
     unsigned long used;
 } dictht;
 
+/**
+ * 字典
+ * 
+ * 每个字典使用两个哈希表，用于实现渐进式 rehash
+ */
 typedef struct dict {
+    // 特定于类型的处理函数
     dictType *type;
+
+    // 类型处理函数的私有数量
     void *privdata;
+
+    // 哈希表(2个)
     dictht ht[2];
+
+    // 记录rehash 进度的标志，值为-1，表示rehash 未进行
     long rehashidx;
+
+    // 当前正在运行的安全迭代器数量
     unsigned long iterators;
 } dict;
 
+
+/**
+ * 字典迭代器
+ * 如果 safe 属性的值为1，那么表示这个迭代器是一个安全的迭代器
+ * 当安全迭代器正在迭代一个字典时，该字典仍然可以调用dictAdd, dictFind和其他函数
+ * 
+ * 如果 safe 属性的值为 0， 那么表示这不是一个安全迭代器
+ * 如果正在运行的迭代器是不安全迭代器，那么它只可以对字段调用 dictNex函数
+ */
 typedef struct dictIterator {
+    // 正在迭代的字典
     dict *d;
+
+    // 正在迭代的哈希表数组索引
     long index;
-    int table, safe;
-    dictEntry *entry, *nextEntry;
+    int table, safe;                // table: 正在迭代的哈希表的号码(0或者1), safe: 是否安全?
+    dictEntry *entry, *nextEntry;   // entry: 当前哈希节点, nextEntry: 当前哈希节点的后继节点
     // 用于误用检测的不安全迭代器的指纹
     long long fingerprint;
 } dictIterator;
@@ -55,6 +106,7 @@ typedef struct dictIterator {
 typedef void (dictScanFunction)(void *privdata, const dictEntry *de);
 typedef void (dictScanBucketFunction)(void *privdata, dictEntry **bucketref);
 
+// 所有哈希表的起始大小
 #define DICT_HT_INITIAL_SIZE 4
 
 #define dictFreeVal(d, entry) \

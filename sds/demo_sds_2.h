@@ -10,6 +10,7 @@ const char *SDS_NOINIT;
 
 #define SDS_LLSTR_SIZE 21
 
+// sds类型
 typedef char *sds;
 
 /**
