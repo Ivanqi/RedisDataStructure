@@ -108,16 +108,16 @@ sds sdsnewlen(const void *init, size_t initlen) {
     if (sh == NULL) return NULL;
 
     s = (char *)sh + hdrlen;
-    fp = ((unsigned char *) s) - 1;
+    fp = ((unsigned char *) s) - 1; // flag
 
     switch (type) {
         case SDS_TYPE_5: {
-            *fp = type | (initlen << SDS_TYPE_BITS);
+            *fp = type | (initlen << SDS_TYPE_BITS);    // 高3位是header类型，低5位是长度信息
             break;
         }
 
         case SDS_TYPE_8: {
-            SDS_HDR_VAR(8, s);
+            SDS_HDR_VAR(8, s);  // 获取sds结构体
             sh->len = initlen;
             sh->alloc = initlen;
             *fp = type;
@@ -125,14 +125,14 @@ sds sdsnewlen(const void *init, size_t initlen) {
         }
 
         case SDS_TYPE_16: {
-            SDS_HDR_VAR(16, s);
+            SDS_HDR_VAR(16, s); // 获取sds结构体
             sh->len = initlen;
             sh->alloc = initlen;
             *fp = type;
         }
 
         case SDS_TYPE_32: {
-            SDS_HDR_VAR(32,s);
+            SDS_HDR_VAR(32,s);  // 获取sds结构体
             sh->len = initlen;
             sh->alloc = initlen;
             *fp = type;
@@ -140,7 +140,7 @@ sds sdsnewlen(const void *init, size_t initlen) {
         }
 
         case SDS_TYPE_64: {
-            SDS_HDR_VAR(64,s);
+            SDS_HDR_VAR(64,s);  // 获取sds结构体
             sh->len = initlen;
             sh->alloc = initlen;
             *fp = type;
@@ -149,6 +149,7 @@ sds sdsnewlen(const void *init, size_t initlen) {
     }
 
     if (initlen && init) {
+        // 把数据复制到柔性数组中
         memcpy(s, init, initlen);
     }
 
@@ -193,11 +194,12 @@ sds sdscpy(sds s, const char *t) {
 sds sdsMakeRoomFor(sds s, size_t addlen) {
 
     void *sh, *newsh;
-    size_t avail = sdsavail(s);
+    size_t avail = sdsavail(s); // 返回空闲字节
     char type, oldtype = s[-1] & SDS_TYPE_MASK;
     size_t len, newlen;
     int hdrlen;
 
+    // 剩余空间可以满足需求，无须扩展
     if (avail >= addlen) return s;
 
     len = sdslen(s);

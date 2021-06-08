@@ -64,6 +64,7 @@ struct __attribute__((__packed__)) sdshdr64 {
     char buf[];
 };
 
+// SDS Header 的类型
 #define SDS_TYPE_5 0
 #define SDS_TYPE_8 1
 #define SDS_TYPE_16 2
