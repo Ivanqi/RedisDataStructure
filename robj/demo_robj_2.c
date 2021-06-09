@@ -129,6 +129,7 @@ robj *createRawStringObject(const char *ptr, size_t len) {
 robj *createEmbeddedStringObject(const char *ptr, size_t len) {
 
     robj *o = malloc(sizeof(robj) + sizeof(struct sdshdr8) + len + 1);
+    // o + 1相当于 o + sizeof(robj)， robj为16字节
     struct sdshdr8 *sh = (void *)(o + 1);
 
     o->type = OBJ_STRING;
