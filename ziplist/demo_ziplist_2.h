@@ -11,23 +11,23 @@
 #define ZIP_BIG_PREVLEN 254
 
 // 不同的编码/长度可能性
-#define ZIP_STR_MASK 0xc0 // 1100 0000
-#define ZIP_INT_MASK 0x30 // 0011 0000
-#define ZIP_STR_06B (0 << 6) // 0 * (2 ^ 6)
-#define ZIP_STR_14B (1 << 6) // 1 * (2 ^ 6)
-#define ZIP_STR_32B (2 << 6) // 2 * (2 ^ 6)
-#define ZIP_INT_16B (0xc0 | 0 << 4)
-#define ZIP_INT_32B (0xc0 | 1 << 4)
-#define ZIP_INT_64B (0xc0 | 2 << 4)
-#define ZIP_INT_24B (0xc0 | 3 << 4)
-#define ZIP_INT_8B 0xfe // 1111 1110
+#define ZIP_STR_MASK 0xc0 // 192 = 1100 0000
+#define ZIP_INT_MASK 0x30 // 48 = 0011 0000
+#define ZIP_STR_06B (0 << 6) // 0 * (2 ^ 6) = 0
+#define ZIP_STR_14B (1 << 6) // 1 * (2 ^ 6) = 64
+#define ZIP_STR_32B (2 << 6) // 2 * (2 ^ 6) = 128
+#define ZIP_INT_16B (0xc0 | 0 << 4) // 192 | 0 * (2 ^ 4) = 192
+#define ZIP_INT_32B (0xc0 | 1 << 4) // 192 | 1 * (2 ^ 4) = 208 = 1101 0000
+#define ZIP_INT_64B (0xc0 | 2 << 4) // 192 | 2 * (2 ^ 4) = 224 = 1110 0000
+#define ZIP_INT_24B (0xc0 | 3 << 4) // 192 | 3 * (2 ^ 4) = 240 = 1110 0000
+#define ZIP_INT_8B 0xfe // 254 = 1111 1110
 
 // 4 bit integer immediate encoding
-#define ZIP_INT_IMM_MASK 0x0f // 1111
-#define ZIP_INT_IMM_MIN 0xf1  // 1111 0001
-#define ZIP_INT_IMM_MAX 0xfd  // 1111 1101
+#define ZIP_INT_IMM_MASK 0x0f // 15 = 1111
+#define ZIP_INT_IMM_MIN 0xf1  // 241 = 1111 0001
+#define ZIP_INT_IMM_MAX 0xfd  // 253 = 1111 1101
 
-#define INT24_MAX 0x7fffff  // 0111 1111 1111 1111 1111 1111
+#define INT24_MAX 0x7fffff  // 8388607 = 0111 1111 1111 1111 1111 1111
 #define INT24_MIN (-INT24_MAX - 1)
 
 #define ZIP_IS_STR(enc) (((enc) & ZIP_STR_MASK) < ZIP_STR_MASK)
@@ -247,6 +247,7 @@ int64_t zipLoadInteger(unsigned char *p, unsigned char encoding);
 
 void zipEntry(unsigned char *p, zlentry *e);
 
+// 创建一个新的压缩列表，O(1)
 unsigned char *ziplistNew(void);
 
 unsigned char *ziplistResize(unsigned char *zl, unsigned int len);
@@ -259,28 +260,41 @@ unsigned char *__ziplistInsert(unsigned char *zl, unsigned char *p, unsigned cha
 
 unsigned char *ziplistMerge(unsigned char **first, unsigned char **second);
 
+// 创建一个包含给定值的新节点，并将这个新节点添加到压缩列表的表头或表尾,平均O(N)，最坏O(N ^ 2)
 unsigned char *ziplistPush(unsigned char *zl, unsigned char *s, unsigned int slen, int where);
 
+// 返回压缩列表给定索引上的节点, O(N)
 unsigned char *ziplistIndex(unsigned char *zl, int index);
 
+// 返回给定节点的下一个节点，O(1)
 unsigned char *ziplistNext(unsigned char *zl, unsigned char *p);
 
+// 返回给定节点的前一个节点,O(1)
 unsigned char *ziplistPrev(unsigned char *zl, unsigned char *p);
 
+// 获取给定节点所保存的值, O(1)
 unsigned int ziplistGet(unsigned char *p, unsigned char **sval, unsigned int *slen, long long *lval);
 
+// 将包含给定值的新节点插入到给定节点之后，平均O(N)，最坏O(N ^ 2)
 unsigned char *ziplistInsert(unsigned char *zl, unsigned char *p, unsigned char *s, unsigned int slen);
 
+// 从压缩列表中删除给定的节点。平均O(N), 最坏O(N ^ 2)
 unsigned char *ziplistDelete(unsigned char *zl, unsigned char **p);
 
+// 删除压缩列表在给定索引上的连续多个节点. 平均O(N)， 最坏O(N ^ 2)
 unsigned char *ziplistDeleteRange(unsigned char *zl, int index, unsigned int num);
 
 unsigned int ziplistCompare(unsigned char *p, unsigned char *s, unsigned int slen);
 
+// 在压缩列表中查找并返回包含了给定值的节点
+// 因为节点的值可能是一个字节数组，所以检查节点值和给定值是否相同的复杂度为O(N),而查找整个列表的复杂度则为O(N ^ 2)
 unsigned char *ziplistFind(unsigned char *p, unsigned char *vstr, unsigned int vlen, unsigned int skip);
 
+// 返回压缩列表目前包含的节点数据
+// 节点数量小于 65535 时候为 O(1), 大于 65535为O(N)
 unsigned int ziplistLen(unsigned char *zl);
 
+// 返回压缩列表目前占用的内存字节数，O(1)
 size_t ziplistBlobLen(unsigned char *zl);
 
 void ziplistRepr(unsigned char *zl);

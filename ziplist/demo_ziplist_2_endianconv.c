@@ -12,6 +12,7 @@ void memrev16(void *p) {
 }
 
 // 将 *p指向的32位无符号整数从little endian 切换到 big endian
+// 每一个下标的值代表一个字节
 void memrev32(void *p) {
 
     unsigned char *x = (unsigned char *) p, t;
