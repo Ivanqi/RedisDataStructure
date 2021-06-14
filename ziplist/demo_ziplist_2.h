@@ -11,23 +11,23 @@
 #define ZIP_BIG_PREVLEN 254
 
 // 不同的编码/长度可能性
-#define ZIP_STR_MASK 0xc0 // 192 = 1100 0000
-#define ZIP_INT_MASK 0x30 // 48 = 0011 0000
-#define ZIP_STR_06B (0 << 6) // 0 * (2 ^ 6) = 0
-#define ZIP_STR_14B (1 << 6) // 1 * (2 ^ 6) = 64
-#define ZIP_STR_32B (2 << 6) // 2 * (2 ^ 6) = 128
+#define ZIP_STR_MASK 0xc0           // 192 = 1100 0000
+#define ZIP_INT_MASK 0x30           // 48 = 0011 0000
+#define ZIP_STR_06B (0 << 6)        // 0 * (2 ^ 6) = 0
+#define ZIP_STR_14B (1 << 6)        // 1 * (2 ^ 6) = 64
+#define ZIP_STR_32B (2 << 6)        // 2 * (2 ^ 6) = 128
 #define ZIP_INT_16B (0xc0 | 0 << 4) // 192 | 0 * (2 ^ 4) = 192
 #define ZIP_INT_32B (0xc0 | 1 << 4) // 192 | 1 * (2 ^ 4) = 208 = 1101 0000
 #define ZIP_INT_64B (0xc0 | 2 << 4) // 192 | 2 * (2 ^ 4) = 224 = 1110 0000
 #define ZIP_INT_24B (0xc0 | 3 << 4) // 192 | 3 * (2 ^ 4) = 240 = 1110 0000
-#define ZIP_INT_8B 0xfe // 254 = 1111 1110
+#define ZIP_INT_8B 0xfe             // 254 = 1111 1110
 
 // 4 bit integer immediate encoding
-#define ZIP_INT_IMM_MASK 0x0f // 15 = 1111
-#define ZIP_INT_IMM_MIN 0xf1  // 241 = 1111 0001
-#define ZIP_INT_IMM_MAX 0xfd  // 253 = 1111 1101
+#define ZIP_INT_IMM_MASK 0x0f       // 15 = 1111
+#define ZIP_INT_IMM_MIN 0xf1        // 241 = 1111 0001
+#define ZIP_INT_IMM_MAX 0xfd        // 253 = 1111 1101
 
-#define INT24_MAX 0x7fffff  // 8388607 = 0111 1111 1111 1111 1111 1111
+#define INT24_MAX 0x7fffff          // 8388607 = 0111 1111 1111 1111 1111 1111
 #define INT24_MIN (-INT24_MAX - 1)
 
 #define ZIP_IS_STR(enc) (((enc) & ZIP_STR_MASK) < ZIP_STR_MASK)
@@ -65,7 +65,7 @@
  * ZIPLIST_LENGTH(zl) 的最大值为 UINT16_MAX
  * 复杂度: O(1)
  */
-#define ZIPLIST_INCR_LENGTH(zl, incr) {  \
+#define ZIPLIST_INCR_LENGTH(zl, incr) {     \
     if (ZIPLIST_LENGTH(zl) < UINT16_MAX)    \
         ZIPLIST_LENGTH(zl) = intrev16ifbe(intrev16ifbe(ZIPLIST_LENGTH(zl)) + incr);    \
 }
@@ -87,48 +87,34 @@
  * 
  *  <zlend> 是一个单字节的特殊值，等于 255 ，它标识了列表的末端。
  * 
- * ZIPLIST ENTRIES
- *  Ziplist 中的每个节点，都带有一个 header 作为前缀
- *  
- *  Header 包括两部分：
- *      1) 前一个节点的长度，在从后往前遍历时使用
- *      2) 当前节点所保存的值的类型和长度 
+ * <entry> 构成
+ *      <prevrawlen><len><data>
+ *      prevrawlen: 
+ *          表示前一个数据项占用的总字节数。这个字段的用处是为了让ziplist能够从后向前遍历(从后一项，只需向前偏移prevrawlen个字节，就找到了前一项)
+ *          这个字段采用变长编码
+ *      len:
+ *          表示当前数据项的数据长度(即: <data>部分的长度)。也采用变长编码
  * 
- * 前一个节点的长度的储存方式如下：
- *      1) 如果节点的长度 < 254 字节，那么直接用一个字节保存这个值。
- *      2) 如果节点的长度 >= 254 字节，那么将第一个字节设置为 254 ，再在之后用 4 个字节来表示节点的实际长度（共使用 5 个字节）。
+ * <prevrawlen>和<len>是怎么进行变长编码的呢？
+ *  <prevrawlen> 它有两种可能，或者是1个字节，或者是5个字节
+ *      1). 如果前一个数据项占用字节数小于254，那么<prevrawlen>就只用一个字节来表示，这个字节的值就是前一个数据项的占用字节数
+ *      2). 如果前一个数据项占用字节数大于等于254，那么<prevrawlen>就用5个字节来表示，其中第1字节的值是254(作为这种情况的一个标记)，而后面4个字节组成一个整型值，来真正存储一个数据项的占用字节数
+ *  <len>
+ *      |00pppppp| - 1 byte. 长度 <= 63 字节(6 位)的字符串值
+ *      |01pppppp|qqqqqqqq| - 2 bytes. 长度 <= 16383 字节(14 位)的字符串值
+ *      |10______|qqqqqqqq|rrrrrrrr|ssssssss|tttttttt| - 5 bytes.  长度 >= 16384 字节， <= 4294967295 的字符串值
+ *      |11000000| - 1 byte. 以 int16_t (2 字节)类型编码的整数
+ *      |11010000| - 1 byte. 以 int32_t (4 字节)类型编码的整数
+ *      |11110000| - 1 byte. 以 int64_t (8 字节)类型编码的整数
+ *      |11110000| - 1 byte.  24 位(3 字节)有符号编码整数
+ *      |11111110| - 1 byte.  8 位(1 字节)有符号编码整数
+ *      |1111xxxx|
+ *             (介于 0000 和 1101 之间)的 4 位整数，可用于表示无符号整数 0 至 12 
+ *             因为 0000 和 1111 都已经被占用，因此，可被编码的值实际上只能是 1 至 13
+ *             要将这个值减去 1 ，才能得到正确的值
+ *      |11111111| - End of ziplist. ziplist 的终结符
  * 
- * 另一个 header 域保存的信息取决于这个节点所保存的内容本身。
- * 
- * 当节点保存的是字符串时，header 的前 2 位用于指示保存内容长度所使用的编码方式，之后跟着的是内容长度的值。
- * 
- * 当节点保存的是整数时，header 的前 2 位都设置为 1 ，之后的 2 位用于指示保存的整数值的类型（这个类型决定了内容所占用的空间）。
- * 
- * 以下是不同类型 header 的概览：
- *  |00pppppp| - 1 byte
- *      长度 <= 63 字节(6 位)的字符串值
- *  |01pppppp|qqqqqqqq| - 2 bytes
- *      长度 <= 16383 字节(14 位)的字符串值
- *  |10______|qqqqqqqq|rrrrrrrr|ssssssss|tttttttt| - 5 bytes
- *      长度 >= 16384 字节， <= 4294967295 的字符串值，
- *  |11000000| - 1 byte
- *      以 int16_t (2 字节)类型编码的整数
- *  |11010000| - 1 byte
- *      以 int32_t (4 字节)类型编码的整数
- *  |11100000| - 1 byte
- *      以 int64_t (8 字节)类型编码的整数
- *  |11110000| - 1 byte
- *      24 位(3 字节)有符号编码整数
- *  |11111110| - 1 byte
- *      8 位(1 字节)有符号编码整数
- *  |1111xxxx|
- *      (介于 0000 和 1101 之间)的 4 位整数，可用于表示无符号整数 0 至 12 。
- *      因为 0000 和 1111 都已经被占用，因此，可被编码的值实际上只能是 1 至 13 ，
- *      要将这个值减去 1 ，才能得到正确的值。
- *  |11111111| - End of ziplist.
- *      ziplist 的终结符
- * 
- * 所有整数都以小端表示。
+ * 所有整数都以小端表示
  *      
  */
 typedef struct zlentry {
