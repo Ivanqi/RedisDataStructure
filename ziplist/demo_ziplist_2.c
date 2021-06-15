@@ -232,7 +232,6 @@ int64_t zipLoadInteger(unsigned char *p, unsigned char encoding) {
  */
 void zipEntry(unsigned char *p, zlentry *e) {
 
-
     // 取出前一个节点的长度
     ZIP_DECODE_PREVLEN(p, e->prevrawlensize, e->prevrawlen);
     
@@ -466,7 +465,7 @@ unsigned char *__ziplistInsert(unsigned char *zl, unsigned char *p, unsigned cha
     unsigned int prevlensize, prevlen = 0;
     size_t offset;
     int nextdiff = 0;
-    unsigned char encoding = 0;
+    unsigned char encoding = 0;         // s 如果值是数字，encoding就表示它所占的字节数
     long long value = 123456789;
 
     zlentry tail;
@@ -585,10 +584,10 @@ unsigned char *__ziplistInsert(unsigned char *zl, unsigned char *p, unsigned cha
 
     // 写入数据到节点
 
-    // 编码上一节点的长度，并向后移动指针
+    // 编码上一节点的长度，并向后移动指针。也就是<prevrawlen>
     p += zipStorePrevEntryLength(p, prevlen);
 
-    // 编码本节点的长度和类型，并向后移动指针
+    // 编码本节点的长度和类型，并向后移动指针，也就是<len>
     p += zipStoreEntryEncoding(p, encoding, slen);
 
     // 写入内容到节点
@@ -1081,8 +1080,7 @@ void ziplistRepr(unsigned char *zl) {
                 if (fwrite(p, 40, 1, stdout) == 0) perror("fwrite");
                 printf("...");
             } else {
-                if (entry.len &&
-                    fwrite(p,entry.len, 1, stdout) == 0) perror("fwrite");
+                if (entry.len && fwrite(p, entry.len, 1, stdout) == 0) perror("fwrite");
             }
         } else {
             printf("\t[int]%lld", (long long) zipLoadInteger(p,entry.encoding));
