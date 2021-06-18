@@ -479,7 +479,7 @@ unsigned char *__ziplistInsert(unsigned char *zl, unsigned char *p, unsigned cha
     } else {
         // 获取列表最后一个节点 （表尾）的地址
         unsigned char *ptail = ZIPLIST_ENTRY_TAIL(zl);
-        // 如果地址之后不是末端（也即是，列表至少有一个节点）
+        // 如果地址之后不是末端（也即是，列表至少有一个节点）.那么就是必须得到这个节点的prevlen + len,用于移动指针
         if (ptail[0] != ZIP_END) {
             // 保存ptail 指向的节点的空间长度
             prevlen = zipRawEntryLength(ptail);
