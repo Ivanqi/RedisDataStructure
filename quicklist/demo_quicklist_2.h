@@ -192,7 +192,9 @@ typedef struct quicklistEntry {
 
 #define quicklistAllowsCompression(_ql) ((_ql)->compress != 0)
 
-// // 接口
+// 接口
+
+// 创建新的 quicklist
 quicklist *quicklistCreate(void);
 
 quicklist *quicklistNew(int fill, int compress);
@@ -201,14 +203,17 @@ void quicklistSetCompressDepth(quicklist *quicklist, int depth);
 
 void quicklistSetFill(quicklist *quicklist, int fill);
 
+// 设置quicklist配置项
 void quicklistSetOptions(quicklist *quicklist, int fill, int depth);
 
 void quicklistRelease(quicklist *quicklist);
 
 int quicklistPushHead(quicklist *quicklist, void *value, const size_t sz);
 
+// 向快表的尾部节点添加新条目
 int quicklistPushTail(quicklist *quicklist, void *value, const size_t sz);
 
+// quicklist的push操作
 void quicklistPush(quicklist *quicklist, void *value, const size_t sz, int where);
 
 void quicklistAppendZiplist(quicklist *quicklist, unsigned char *zl);
