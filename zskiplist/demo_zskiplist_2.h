@@ -8,21 +8,22 @@
 
 typedef struct zskiplistNode {
     sds ele;
-    double score;
-    struct zskiplistNode *backward;
+    double score;                       // 分值
+    struct zskiplistNode *backward;     // 后退指针. backward字段是指向链表前一个节点的指针（前向指针）,节点只有1个前向指针，所以只有第1层链表是一个双向链表
 
     struct zskiplistLevel {
-        struct zskiplistNode *forward;
-        unsigned long span;
+        struct zskiplistNode *forward;  // 前进指针
+        unsigned long span;             // 这个层跨越的节点数量
     } level[];
 } zskiplistNode;
 
 typedef struct zskiplist {
-    struct zskiplistNode *header, *tail;
-    unsigned long length;
-    int level;
+    struct zskiplistNode *header, *tail;    // 头节点，尾节点
+    unsigned long length;                   // 节点数量
+    int level;                              // 目前表内节点的最大层数
 } zskiplist;
 
+// 用于保存范围值的结构
 typedef struct {
     double min, max;
     int minex, maxex;

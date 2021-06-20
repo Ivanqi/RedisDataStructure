@@ -117,7 +117,6 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
     assert(!isnan(score));
 
     x = zsl->header;
-
     /**
      * 记录沿途访问的节点，并计数span等属性
      * 平均 O(logN)， 最快O(N)
@@ -150,6 +149,7 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
 
     // 计算新的随机层数
     level = zslRandomLevel();
+    printf("level:%d, %d\n", zsl->level, level);
 
     /**
      * 如果level比当前 skiplist 的最大层数还要大
