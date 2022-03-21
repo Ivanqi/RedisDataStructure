@@ -156,6 +156,11 @@ robj *createEmbeddedStringObject(const char *ptr, size_t len) {
 
 robj *createStringObject(const char *ptr, size_t len) {
 
+    /**
+     * 为什么是44字节？ 
+     *  原因: 新版的sds做了优化，len、cap以及新增的flag使用的都是int8类型，只占用1个字节，这样64-16（ReadObj头部）-3（sds头部）-1（buf末尾\0）= 44
+     *  sdshdr8 这个结构体 能够使用的最大字节为8*8=64字节
+     */
     if (len <= OBJ_ENCODING_EMBSTR_SIZE_LIMIT) {
         return createEmbeddedStringObject(ptr, len);
     } else {
